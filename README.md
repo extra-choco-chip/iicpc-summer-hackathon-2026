@@ -3,7 +3,7 @@ High-performance distributed trading simulation platform
 
 # Distributed Trading Platform
 
-A high-performance sandboxed trading simulation platform for load testing and telemetry analysis.
+A high-performance sandboxed trading simulation platform git for load testing and telemetry analysis.
 
 ## Planned Stack
 - Python
