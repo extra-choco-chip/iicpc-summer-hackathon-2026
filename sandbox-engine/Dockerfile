@@ -10,5 +10,5 @@ COPY contestant_engine.py /app/contestant_engine.py
 # 4. The Port: Document the hole in the wall
 EXPOSE 8080
 
-# 5. The Command: Turn on the engine
-CMD ["python", "/app/contestant_engine.py"]
+# 5. The Command: Turn on the engine (Unbuffered mode)
+CMD ["python", "-u", "/app/contestant_engine.py"]
