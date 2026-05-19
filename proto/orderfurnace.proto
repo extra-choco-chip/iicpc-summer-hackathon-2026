@@ -1,0 +1,103 @@
+syntax = "proto3";
+package orderfurnace;
+option go_package = "github.com/orderfurnace/proto";
+
+// ── Submission Service ──────────────────────────────────────────────────────
+service SubmissionService {
+  rpc SubmitCode(stream SubmitChunk) returns (SubmitResponse);
+  rpc GetSubmission(GetSubmissionRequest) returns (Submission);
+  rpc ListSubmissions(ListSubmissionsRequest) returns (ListSubmissionsResponse);
+}
+message SubmitChunk {
+  oneof data {
+    SubmitMeta meta  = 1;
+    bytes      chunk = 2;
+  }
+}
+message SubmitMeta {
+  string team_name     = 1;
+  string language      = 2;
+  string endpoint_type = 3;
+  string filename      = 4;
+}
+message SubmitResponse {
+  string submission_id = 1;
+  string status        = 2;
+  string message       = 3;
+}
+message GetSubmissionRequest   { string submission_id = 1; }
+message ListSubmissionsRequest { int32 limit = 1; int32 offset = 2; }
+message ListSubmissionsResponse { repeated Submission submissions = 1; }
+message Submission {
+  string submission_id  = 1;
+  string team_name      = 2;
+  string language       = 3;
+  string endpoint_type  = 4;
+  string status         = 5;
+  string created_at     = 6;
+  string session_id     = 7;
+}
+
+// ── Bot Orchestrator ────────────────────────────────────────────────────────
+service BotOrchestratorService {
+  rpc StartBenchmark(StartBenchmarkRequest) returns (StartBenchmarkResponse);
+  rpc StopBenchmark(StopBenchmarkRequest)   returns (StopBenchmarkResponse);
+  rpc GetSession(GetSessionRequest)         returns (BenchmarkSession);
+  rpc WorkerStream(stream WorkerHeartbeat)  returns (stream WorkerCommand);
+}
+message StartBenchmarkRequest {
+  string submission_id   = 1;
+  string target_endpoint = 2;
+  string endpoint_type   = 3;
+  int32  bot_count       = 4;
+  int32  duration_secs   = 5;
+  string session_id      = 6;
+}
+message StartBenchmarkResponse { string session_id = 1; string status = 2; }
+message StopBenchmarkRequest   { string session_id = 1; }
+message StopBenchmarkResponse  { string status = 1; }
+message GetSessionRequest      { string session_id = 1; }
+message BenchmarkSession {
+  string session_id    = 1;
+  string submission_id = 2;
+  string status        = 3;
+  int32  active_bots   = 4;
+  int64  orders_sent   = 5;
+  int64  orders_acked  = 6;
+  double tps           = 7;
+  int64  p50_ns        = 8;
+  int64  p99_ns        = 9;
+  string created_at    = 10;
+}
+message WorkerHeartbeat {
+  string worker_id   = 1;
+  int32  active_bots = 2;
+  int64  orders_sent = 3;
+  string session_id  = 4;
+}
+message WorkerCommand {
+  string command       = 1;
+  string session_id    = 2;
+  string target_url    = 3;
+  int32  bot_count     = 4;
+  string endpoint_type = 5;
+}
+
+// ── Telemetry ───────────────────────────────────────────────────────────────
+message TelemetryEvent {
+  string session_id    = 1;
+  string order_id      = 2;
+  string event_type    = 3;
+  int64  t_send_ns     = 4;
+  int64  t_ack_ns      = 5;
+  int64  latency_ns    = 6;
+  string side          = 7;
+  string order_type    = 8;
+  double price         = 9;
+  double qty           = 10;
+  double fill_price    = 11;
+  double fill_qty      = 12;
+  int64  seq_no        = 13;
+  bool   violation     = 14;
+  string violation_msg = 15;
+}

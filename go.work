@@ -1,0 +1,11 @@
+go 1.22
+
+use (
+	./services/api-gateway
+	./services/submission-service
+	./services/bot-orchestrator
+	./services/bot-worker
+	./services/telemetry-service
+	./services/scoring-service
+	./services/ws-gateway
+)

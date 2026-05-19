@@ -1,0 +1,252 @@
+version: "3.9"
+
+networks:
+  orderfurnace:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  timescale_data:
+
+services:
+
+  # ── Data Stores ──────────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      # These three env vars create the user, password, AND database on first run.
+      # The init SQL in docker-entrypoint-initdb.d then runs AS this user inside
+      # the already-created database — so no "does not exist" errors.
+      POSTGRES_USER:     of_user
+      POSTGRES_PASSWORD: of_secret
+      POSTGRES_DB:       orderfurnace
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-sql/01-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    networks: [orderfurnace]
+    ports: ["5432:5432"]
+    healthcheck:
+      # Wait until Postgres is ACTUALLY accepting connections on the right db
+      test: ["CMD-SHELL", "pg_isready -U of_user -d orderfurnace"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_USER:     ts_user
+      POSTGRES_PASSWORD: ts_secret
+      POSTGRES_DB:       telemetry
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./init-sql/02-timescale.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    networks: [orderfurnace]
+    ports: ["5433:5432"]
+    # Must pass shared_preload_libraries for TimescaleDB extension
+    command: ["postgres", "-c", "shared_preload_libraries=timescaledb"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ts_user -d telemetry"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.2-alpine
+    command: >
+      redis-server
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --save ""
+      --appendonly no
+    volumes: [redis_data:/data]
+    networks: [orderfurnace]
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redpanda:
+    image: redpandadata/redpanda:v23.3.21
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=512M
+      - --overprovisioned
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
+      - --pandaproxy-addr=0.0.0.0:8082
+      - --schema-registry-addr=0.0.0.0:8081
+      - --rpc-addr=0.0.0.0:33145
+      - --advertise-rpc-addr=redpanda:33145
+      - --default-log-level=warn
+    networks: [orderfurnace]
+    ports: ["9092:9092", "8081:8081", "8082:8082"]
+    healthcheck:
+      # Hit the Pandaproxy HTTP endpoint — returns 200 when Redpanda is ready.
+      # Much more reliable than rpk commands inside the container.
+      test: ["CMD-SHELL", "rpk cluster info || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER:     minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    volumes: [minio_data:/data]
+    networks: [orderfurnace]
+    ports: ["9000:9000", "9001:9001"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # ── Application Services ─────────────────────────────────────────────────────
+
+  api-gateway:
+    build: ./services/api-gateway
+    environment:
+      PORT:           "8080"
+      JWT_SECRET:     "change-me-in-production"
+      SUBMISSION_SVC: "http://submission-service:8080"
+      WS_GATEWAY:     "http://ws-gateway:8080"
+      SCORING_URL:    "http://scoring-service:8080"
+      REDIS_URL:      "redis:6379"
+    networks: [orderfurnace]
+    ports: ["8000:8080"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  submission-service:
+    build: ./services/submission-service
+    environment:
+      PORT:               "8080"
+      POSTGRES_DSN:       "postgresql://of_user:of_secret@postgres:5432/orderfurnace?sslmode=disable"
+      MINIO_ENDPOINT:     "minio:9000"
+      MINIO_ACCESS_KEY:   "minioadmin"
+      MINIO_SECRET_KEY:   "minioadmin123"
+      MINIO_BUCKET:       "submissions"
+      BOT_ORCHESTRATOR_URL: "http://bot-orchestrator:9090"
+      CONTAINER_REGISTRY: "localhost:5000"
+      SANDBOX_RUNTIME:    "runc"
+    networks: [orderfurnace]
+    ports: ["8001:8080"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  bot-orchestrator:
+    build: ./services/bot-orchestrator
+    environment:
+      PORT:      "9090"
+      REDIS_URL: "redis:6379"
+    networks: [orderfurnace]
+    ports: ["9090:9090"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  bot-worker:
+    build: ./services/bot-worker
+    environment:
+      ORCHESTRATOR_URL:      "http://bot-orchestrator:9090"
+      REDPANDA_BROKERS:      "redpanda:9092"
+      TELEMETRY_TOPIC:       "raw.telemetry"
+      GOROUTINES_PER_WORKER: "8"
+    networks: [orderfurnace]
+    depends_on:
+      bot-orchestrator:
+        condition: service_started
+      redpanda:
+        condition: service_healthy
+    restart: on-failure
+    deploy:
+      replicas: 4
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 10
+
+  telemetry-service:
+    build: ./services/telemetry-service
+    environment:
+      REDPANDA_BROKERS:     "redpanda:9092"
+      TELEMETRY_TOPIC:      "raw.telemetry"
+      KAFKA_CONSUMER_GROUP: "telemetry-cg-1"
+      TIMESCALE_DSN:        "postgresql://ts_user:ts_secret@timescaledb:5432/telemetry?sslmode=disable"
+      REDIS_URL:            "redis:6379"
+    networks: [orderfurnace]
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    restart: unless-stopped
+
+  scoring-service:
+    build: ./services/scoring-service
+    environment:
+      PORT:                  "8080"
+      REDIS_URL:             "redis:6379"
+      TIMESCALE_DSN:         "postgresql://ts_user:ts_secret@timescaledb:5432/telemetry?sslmode=disable"
+      SCORE_INTERVAL_SECONDS: "5"
+    networks: [orderfurnace]
+    ports: ["8002:8080"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ws-gateway:
+    build: ./services/ws-gateway
+    environment:
+      PORT:      "8080"
+      REDIS_URL: "redis:6379"
+    networks: [orderfurnace]
+    ports: ["8003:8080"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    image: nginx:alpine
+    volumes:
+      - ./frontend/orderfurnace-frontend.html:/usr/share/nginx/html/index.html:ro
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [orderfurnace]
+    ports: ["3000:80"]
+    depends_on:
+      - api-gateway
+      - ws-gateway
+      - scoring-service
+    restart: unless-stopped
