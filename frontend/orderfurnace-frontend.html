@@ -1,1899 +1,462 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>OrderFurnace — Trading Infrastructure Benchmark</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-<style>
-/* ── Reset & tokens ──────────────────────────────────────────────────────── */
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --bg:#08090d;
-  --bg1:#0e0f15;
-  --bg2:#14151d;
-  --bg3:#1c1d27;
-  --line:rgba(255,255,255,0.06);
-  --line2:rgba(255,255,255,0.1);
-  --fg:#dde1f0;
-  --fg2:#7a7f9a;
-  --fg3:#3d4060;
-  --accent:#e8ff47;       /* electric yellow-green — the ONE pop color */
-  --accent-dim:rgba(232,255,71,0.12);
-  --accent-dim2:rgba(232,255,71,0.06);
-  --red:#ff3f5b;
-  --red-dim:rgba(255,63,91,0.12);
-  --blue:#4d9fff;
-  --blue-dim:rgba(77,159,255,0.1);
-  --purple:#a855f7;
-  --green:#00e5a0;
-  --green-dim:rgba(0,229,160,0.1);
-  --amber:#ffb224;
-  --mono:'Space Mono',monospace;
-  --display:'Bebas Neue',sans-serif;
-  --sans:'DM Sans',sans-serif;
-  --r:8px;
-  --r2:12px;
-}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OrderFurnace | Command Center</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #09090b;
+            --bg-panel: #18181b;
+            --border-color: #27272a;
+            --text-main: #e4e4e7;
+            --text-muted: #a1a1aa;
+            
+            /* The Neon Lifeblood */
+            --accent-cyan: #06b6d4;
+            --accent-green: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-red: #ef4444;
+            --accent-brand: #d9f99d;
+        }
 
-html{scroll-behavior:smooth}
-body{
-  font-family:var(--sans);
-  background:var(--bg);
-  color:var(--fg);
-  min-height:100vh;
-  overflow-x:hidden;
-  font-size:14px;
-}
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-/* ── Scanline overlay ────────────────────────────────────────────────────── */
-body::before{
-  content:'';
-  position:fixed;inset:0;
-  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);
-  pointer-events:none;z-index:9999;
-}
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            padding: 24px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
 
-/* ── Noise texture ───────────────────────────────────────────────────────── */
-body::after{
-  content:'';
-  position:fixed;inset:0;
-  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
-  pointer-events:none;z-index:9998;opacity:.4;
-}
+        /* Top Navigation */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 24px;
+        }
 
-/* ── Scrollbar ───────────────────────────────────────────────────────────── */
-::-webkit-scrollbar{width:4px;height:4px}
-::-webkit-scrollbar-track{background:var(--bg1)}
-::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:2px}
+        .logo {
+            font-weight: 900;
+            font-size: 24px;
+            color: var(--accent-brand);
+            letter-spacing: -0.5px;
+            text-transform: uppercase;
+        }
 
-/* ── Layout shell ────────────────────────────────────────────────────────── */
-.app{display:grid;grid-template-rows:56px 1fr;min-height:100vh}
+        .nav-links {
+            display: flex;
+            gap: 32px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .nav-links span.active {
+            color: var(--text-main);
+            border-bottom: 2px solid var(--accent-brand);
+            padding-bottom: 4px;
+        }
 
-/* ── Top nav ─────────────────────────────────────────────────────────────── */
-.nav{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:0 24px;
-  border-bottom:1px solid var(--line);
-  position:sticky;top:0;z-index:100;
-  background:rgba(8,9,13,0.92);
-  backdrop-filter:blur(12px);
-}
-.nav-logo{
-  font-family:var(--display);
-  font-size:26px;letter-spacing:2px;
-  color:var(--accent);
-  display:flex;align-items:center;gap:10px;
-}
-.nav-logo-icon{
-  width:28px;height:28px;
-  background:var(--accent);
-  border-radius:4px;
-  display:flex;align-items:center;justify-content:center;
-  font-size:14px;
-}
-.nav-tabs{display:flex;gap:2px}
-.nav-tab{
-  padding:6px 16px;border-radius:6px;
-  font-size:12px;font-weight:500;letter-spacing:.5px;text-transform:uppercase;
-  cursor:pointer;border:none;background:transparent;color:var(--fg2);
-  transition:.15s;font-family:var(--mono);
-}
-.nav-tab:hover{color:var(--fg);background:var(--bg2)}
-.nav-tab.active{color:var(--accent);background:var(--accent-dim)}
-.nav-right{display:flex;align-items:center;gap:12px}
+        .user-status {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+        }
 
-/* Connection status pill */
-.conn-pill{
-  display:flex;align-items:center;gap:6px;
-  padding:4px 12px;border-radius:20px;
-  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;
-  transition:.3s;
-}
-.conn-pill.connected{background:var(--green-dim);color:var(--green);border:1px solid rgba(0,229,160,0.2)}
-.conn-pill.disconnected{background:var(--red-dim);color:var(--red);border:1px solid rgba(255,63,91,0.2)}
-.conn-pill.connecting{background:rgba(255,178,36,0.1);color:var(--amber);border:1px solid rgba(255,178,36,0.2)}
-.conn-dot{width:6px;height:6px;border-radius:50%;background:currentColor}
-.conn-pill.connected .conn-dot{animation:blink 2s ease-in-out infinite}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--accent-red);
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 8px var(--accent-red);
+        }
 
-/* Auth button */
-.btn-auth{
-  padding:6px 16px;border-radius:var(--r);
-  font-size:12px;font-weight:600;cursor:pointer;
-  border:1px solid var(--line2);background:var(--bg2);color:var(--fg);
-  transition:.15s;font-family:var(--sans);
-}
-.btn-auth:hover{border-color:var(--accent);color:var(--accent)}
-.team-badge{
-  display:flex;align-items:center;gap:8px;
-  padding:4px 12px;border-radius:20px;
-  background:var(--accent-dim);border:1px solid rgba(232,255,71,0.2);
-  font-family:var(--mono);font-size:11px;color:var(--accent);
-}
+        /* Bento Box Grid Layout */
+        .grid-container {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            grid-template-rows: auto 1fr;
+            gap: 24px;
+            height: 100%;
+        }
 
-/* ── Pages ───────────────────────────────────────────────────────────────── */
-.page{display:none;padding:24px;max-width:1440px;margin:0 auto;width:100%}
-.page.active{display:block}
+        .panel {
+            background-color: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
 
-/* ── Section titles ──────────────────────────────────────────────────────── */
-.section-title{
-  font-family:var(--display);font-size:13px;letter-spacing:3px;
-  color:var(--fg3);text-transform:uppercase;margin-bottom:14px;
-  display:flex;align-items:center;gap:10px;
-}
-.section-title::after{content:'';flex:1;height:1px;background:var(--line)}
+        .panel-header {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+        }
 
-/* ── Cards ───────────────────────────────────────────────────────────────── */
-.card{
-  background:var(--bg1);
-  border:1px solid var(--line);
-  border-radius:var(--r2);
-  overflow:hidden;
-}
-.card-header{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:12px 16px;
-  border-bottom:1px solid var(--line);
-}
-.card-title{
-  font-family:var(--mono);font-size:11px;font-weight:700;
-  letter-spacing:1.5px;text-transform:uppercase;color:var(--fg2);
-}
-.card-body{padding:16px}
+        /* Upload Area */
+        .upload-zone {
+            flex: 1;
+            border: 1px dashed var(--border-color);
+            background-color: rgba(16, 185, 129, 0.05);
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .upload-zone:hover {
+            border-color: var(--accent-green);
+            background-color: rgba(16, 185, 129, 0.1);
+        }
 
-/* ── Badges ──────────────────────────────────────────────────────────────── */
-.badge{
-  display:inline-flex;align-items:center;gap:4px;
-  padding:2px 8px;border-radius:4px;
-  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.5px;
-}
-.badge-accent{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(232,255,71,0.15)}
-.badge-red{background:var(--red-dim);color:var(--red);border:1px solid rgba(255,63,91,0.15)}
-.badge-green{background:var(--green-dim);color:var(--green);border:1px solid rgba(0,229,160,0.15)}
-.badge-blue{background:var(--blue-dim);color:var(--blue);border:1px solid rgba(77,159,255,0.15)}
-.badge-amber{background:rgba(255,178,36,0.1);color:var(--amber);border:1px solid rgba(255,178,36,0.15)}
-.badge-purple{background:rgba(168,85,247,0.1);color:var(--purple);border:1px solid rgba(168,85,247,0.15)}
+        .file-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-main);
+        }
 
-/* ── Stat tiles ──────────────────────────────────────────────────────────── */
-.stat-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:20px}
-.stat{
-  background:var(--bg1);border:1px solid var(--line);
-  border-radius:var(--r2);padding:14px 16px;
-  position:relative;overflow:hidden;
-}
-.stat::before{
-  content:'';position:absolute;top:0;left:0;right:0;height:2px;
-  background:var(--c,var(--accent));
-}
-.stat-label{font-size:10px;font-weight:600;color:var(--fg3);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px}
-.stat-val{font-family:var(--mono);font-size:24px;font-weight:700;color:var(--fg);line-height:1}
-.stat-sub{font-size:10px;color:var(--fg2);font-family:var(--mono);margin-top:5px}
-.stat-delta{font-size:10px;font-weight:600;margin-top:4px;font-family:var(--mono)}
-.delta-up{color:var(--green)}
-.delta-dn{color:var(--red)}
+        .lang-badges {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
 
-/* ── Leaderboard ─────────────────────────────────────────────────────────── */
-#page-leaderboard .layout{display:grid;grid-template-columns:1fr 300px;gap:16px}
+        .badge {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: #27272a;
+        }
 
-.lb-table{width:100%;border-collapse:collapse}
-.lb-head th{
-  padding:8px 14px;text-align:left;
-  font-family:var(--mono);font-size:10px;font-weight:700;
-  letter-spacing:1px;color:var(--fg3);text-transform:uppercase;
-  border-bottom:1px solid var(--line);
-}
-.lb-row{
-  border-bottom:1px solid var(--line);
-  transition:background .15s;cursor:pointer;
-}
-.lb-row:hover{background:var(--bg2)}
-.lb-row:last-child{border-bottom:none}
-.lb-row td{padding:10px 14px;vertical-align:middle}
+        .badge.rust { color: #f97316; }
+        .badge.cpp { color: #3b82f6; }
+        .badge.go { color: #06b6d4; }
 
-.rank-cell{
-  font-family:var(--mono);font-size:13px;font-weight:700;
-  width:36px;
-}
-.rank-medal{
-  width:28px;height:28px;border-radius:6px;
-  display:flex;align-items:center;justify-content:center;
-  font-size:12px;font-weight:700;font-family:var(--mono);
-}
-.rank-1{background:linear-gradient(135deg,#f5a623,#e8830a);color:#000}
-.rank-2{background:rgba(180,190,210,0.2);color:#b4bed2}
-.rank-3{background:rgba(180,100,50,0.2);color:#c47a45}
-.rank-n{background:var(--bg3);color:var(--fg3)}
+        /* Forms & Buttons */
+        .controls-row {
+            display: flex;
+            gap: 16px;
+            margin-top: 24px;
+        }
 
-.team-cell{display:flex;flex-direction:column;gap:3px}
-.team-name{font-size:13px;font-weight:600;color:var(--fg)}
-.lang-tag{
-  display:inline-block;padding:1px 6px;border-radius:3px;
-  font-family:var(--mono);font-size:10px;font-weight:700;width:fit-content;
-}
-.lang-rust{background:rgba(255,107,43,0.15);color:#ff6b2b}
-.lang-cpp,.lang-c\+\+{background:rgba(77,159,255,0.15);color:var(--blue)}
-.lang-go{background:rgba(0,229,160,0.12);color:var(--green)}
-.lang-c{background:rgba(168,85,247,0.12);color:var(--purple)}
+        select, button {
+            background-color: var(--bg-base);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 12px 16px;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            outline: none;
+        }
 
-.mono-cell{font-family:var(--mono);font-size:12px;color:var(--fg)}
-.mono-cell.muted{color:var(--fg2)}
+        .btn-primary {
+            background-color: var(--accent-brand);
+            color: #000;
+            font-weight: 700;
+            text-transform: uppercase;
+            width: 100%;
+            margin-top: 16px;
+            cursor: pointer;
+            border: none;
+            transition: opacity 0.2s;
+        }
+        
+        .btn-primary:hover { opacity: 0.9; }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.score-cell{display:flex;align-items:center;gap:8px;min-width:120px}
-.score-bar-bg{flex:1;height:3px;background:var(--bg3);border-radius:2px;overflow:hidden}
-.score-bar-fill{height:100%;border-radius:2px;transition:width 1.2s cubic-bezier(.16,1,.3,1)}
-.score-num{font-family:var(--mono);font-size:12px;font-weight:700;min-width:36px;text-align:right}
+        /* Pipeline List */
+        .pipeline-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
 
-.status-cell{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.5px}
-.status-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
-.s-running .status-dot{background:var(--green);animation:blink 1.5s infinite}
-.s-running{color:var(--green)}
-.s-done .status-dot{background:var(--fg3)}
-.s-done{color:var(--fg3)}
-.s-pending .status-dot{background:var(--amber)}
-.s-pending{color:var(--amber)}
-.s-error .status-dot{background:var(--red)}
-.s-error{color:var(--red)}
+        .pipeline-item {
+            display: flex;
+            gap: 16px;
+            align-items: flex-start;
+        }
 
-/* Right column: score breakdown + bot fleet */
-.right-col{display:flex;flex-direction:column;gap:16px}
+        .step-icon {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+        }
 
-/* Score breakdown */
-.breakdown-rows{display:flex;flex-direction:column;gap:10px;padding:14px 16px}
-.breakdown-row{display:flex;flex-direction:column;gap:5px}
-.breakdown-label{display:flex;justify-content:space-between;align-items:center}
-.breakdown-name{font-size:11px;color:var(--fg2);font-weight:500}
-.breakdown-val{font-family:var(--mono);font-size:11px;font-weight:700}
-.breakdown-bar{height:4px;background:var(--bg3);border-radius:2px;overflow:hidden}
-.breakdown-fill{height:100%;border-radius:2px;transition:width 1s ease}
+        .step-info h4 {
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
 
-/* Bot heatmap */
-.bot-heatmap{
-  display:grid;grid-template-columns:repeat(16,1fr);
-  gap:2px;padding:14px 16px;
-}
-.bot-cell{
-  aspect-ratio:1;border-radius:2px;
-  background:var(--bg3);
-  transition:background .15s,transform .1s;
-}
-.bot-cell.hot{background:var(--accent);transform:scale(1.15)}
-.bot-cell.warm{background:rgba(232,255,71,0.4)}
-.bot-cell.cool{background:rgba(232,255,71,0.15)}
-.bot-cell.error{background:var(--red)}
+        .step-info p {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
 
-/* ── Submit page ─────────────────────────────────────────────────────────── */
-#page-submit .layout{display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start}
-
-.upload-zone{
-  border:1px dashed rgba(232,255,71,0.25);
-  border-radius:var(--r2);
-  padding:40px 24px;text-align:center;
-  cursor:pointer;transition:.2s;
-  background:var(--accent-dim2);
-  position:relative;overflow:hidden;
-}
-.upload-zone:hover,.upload-zone.drag{
-  border-color:rgba(232,255,71,0.6);
-  background:var(--accent-dim);
-}
-.upload-zone.has-file{
-  border-color:rgba(0,229,160,0.5);
-  background:var(--green-dim);
-}
-.upload-icon{font-size:36px;margin-bottom:12px;opacity:.6}
-.upload-title{font-family:var(--display);font-size:20px;letter-spacing:1px;color:var(--fg);margin-bottom:6px}
-.upload-sub{font-size:12px;color:var(--fg2);font-family:var(--mono)}
-.upload-langs{display:flex;justify-content:center;gap:6px;margin-top:12px}
-
-.form-group{margin-bottom:16px}
-.form-label{display:block;font-size:11px;font-weight:600;letter-spacing:1px;color:var(--fg2);text-transform:uppercase;margin-bottom:6px;font-family:var(--mono)}
-.form-input,.form-select{
-  width:100%;padding:9px 12px;
-  background:var(--bg2);border:1px solid var(--line2);
-  border-radius:var(--r);color:var(--fg);
-  font-family:var(--mono);font-size:13px;outline:none;
-  transition:.15s;
-}
-.form-input:focus,.form-select:focus{border-color:rgba(232,255,71,0.4);background:var(--bg3)}
-.form-select option{background:var(--bg2)}
-
-.radio-group{display:flex;gap:8px;flex-wrap:wrap}
-.radio-btn{
-  padding:6px 14px;border-radius:6px;
-  border:1px solid var(--line2);background:var(--bg2);
-  font-family:var(--mono);font-size:11px;font-weight:700;
-  color:var(--fg2);cursor:pointer;transition:.15s;letter-spacing:.5px;
-}
-.radio-btn:hover{color:var(--fg);border-color:var(--line2)}
-.radio-btn.active{border-color:rgba(232,255,71,0.4);color:var(--accent);background:var(--accent-dim)}
-
-.btn-primary{
-  display:inline-flex;align-items:center;justify-content:center;gap:8px;
-  padding:11px 24px;border-radius:var(--r);
-  background:var(--accent);color:#000;
-  font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:1px;
-  cursor:pointer;border:none;transition:.15s;width:100%;
-  text-transform:uppercase;
-}
-.btn-primary:hover{opacity:.9;transform:translateY(-1px)}
-.btn-primary:disabled{opacity:.4;cursor:not-allowed;transform:none}
-
-/* Pipeline steps */
-.pipeline{display:flex;flex-direction:column;gap:0}
-.pipeline-step{
-  display:flex;align-items:flex-start;gap:12px;
-  padding:12px 0;
-  border-bottom:1px solid var(--line);
-}
-.pipeline-step:last-child{border-bottom:none}
-.pipeline-icon{
-  width:28px;height:28px;border-radius:6px;
-  display:flex;align-items:center;justify-content:center;
-  font-size:13px;flex-shrink:0;margin-top:1px;
-  background:var(--bg3);
-}
-.pipeline-step.step-done .pipeline-icon{background:var(--green-dim);color:var(--green)}
-.pipeline-step.step-active .pipeline-icon{background:var(--accent-dim);color:var(--accent);animation:pulse-icon 1s ease infinite}
-.pipeline-step.step-error .pipeline-icon{background:var(--red-dim);color:var(--red)}
-@keyframes pulse-icon{0%,100%{opacity:1}50%{opacity:.5}}
-.pipeline-step.step-waiting .pipeline-icon{color:var(--fg3)}
-.pipeline-name{font-size:13px;font-weight:600;color:var(--fg);margin-bottom:2px}
-.pipeline-desc{font-size:11px;color:var(--fg2);font-family:var(--mono)}
-
-/* ── Telemetry page ──────────────────────────────────────────────────────── */
-#page-telemetry .layout{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-
-.telem-feed{
-  height:320px;overflow-y:auto;
-  padding:0;
-}
-.telem-entry{
-  display:grid;grid-template-columns:56px 64px 1fr 72px;
-  gap:8px;align-items:center;
-  padding:6px 16px;
-  border-bottom:1px solid var(--line);
-  font-family:var(--mono);font-size:11px;
-  transition:background .1s;
-}
-.telem-entry:hover{background:var(--bg2)}
-.telem-ts{color:var(--fg3)}
-.telem-type{
-  padding:2px 6px;border-radius:3px;text-align:center;
-  font-size:10px;font-weight:700;letter-spacing:.5px;
-}
-.type-ACK{background:var(--blue-dim);color:var(--blue)}
-.type-FILL{background:var(--green-dim);color:var(--green)}
-.type-CANCEL{background:rgba(255,178,36,0.1);color:var(--amber)}
-.type-REJECT{background:var(--red-dim);color:var(--red)}
-.telem-msg{color:var(--fg2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.telem-lat{color:var(--fg);text-align:right}
-.telem-lat.fast{color:var(--green)}
-.telem-lat.slow{color:var(--red)}
-
-/* Histogram */
-.hist-wrap{padding:16px}
-.hist-bars{display:flex;align-items:flex-end;gap:2px;height:100px}
-.hist-bar{
-  flex:1;border-radius:2px 2px 0 0;
-  background:rgba(232,255,71,0.3);
-  transition:height .5s ease;
-  position:relative;
-}
-.hist-bar.p90{background:rgba(255,178,36,.5)}
-.hist-bar.p99{background:rgba(255,63,91,.5)}
-.hist-axis{
-  display:flex;justify-content:space-between;margin-top:6px;
-  font-family:var(--mono);font-size:9px;color:var(--fg3);
-}
-.hist-legend{
-  display:flex;gap:14px;margin-top:10px;
-}
-.hist-legend-item{
-  display:flex;align-items:center;gap:5px;
-  font-family:var(--mono);font-size:10px;color:var(--fg2);
-}
-.hist-legend-dot{width:8px;height:8px;border-radius:1px}
-
-/* Violations list */
-.violations-list{max-height:200px;overflow-y:auto}
-.violation-row{
-  display:flex;gap:10px;align-items:flex-start;
-  padding:8px 16px;border-bottom:1px solid var(--line);
-  font-family:var(--mono);font-size:11px;
-}
-.violation-row:last-child{border-bottom:none}
-.v-icon{color:var(--red);flex-shrink:0}
-.v-msg{color:var(--fg2);flex:1}
-.v-time{color:var(--fg3);font-size:10px;white-space:nowrap}
-
-/* Correctness grid */
-.correctness-grid{
-  display:grid;grid-template-columns:1fr 1fr;gap:10px;
-  padding:16px;
-}
-.correctness-item{
-  background:var(--bg2);border:1px solid var(--line);
-  border-radius:var(--r);padding:12px;
-}
-.correctness-label{font-size:10px;font-weight:600;color:var(--fg2);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;font-family:var(--mono)}
-.correctness-val{font-family:var(--mono);font-size:20px;font-weight:700}
-.cv-pass{color:var(--green)}
-.cv-warn{color:var(--amber)}
-.cv-fail{color:var(--red)}
-
-/* ── Auth modal ──────────────────────────────────────────────────────────── */
-.modal-backdrop{
-  position:fixed;inset:0;background:rgba(0,0,0,.7);
-  display:flex;align-items:center;justify-content:center;
-  z-index:1000;backdrop-filter:blur(4px);
-  opacity:0;pointer-events:none;transition:.2s;
-}
-.modal-backdrop.open{opacity:1;pointer-events:all}
-.modal{
-  background:var(--bg1);border:1px solid var(--line2);
-  border-radius:var(--r2);width:380px;overflow:hidden;
-  transform:translateY(12px);transition:.2s;
-}
-.modal-backdrop.open .modal{transform:translateY(0)}
-.modal-header{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:16px 20px;border-bottom:1px solid var(--line);
-}
-.modal-title{font-family:var(--display);font-size:20px;letter-spacing:1px;color:var(--accent)}
-.modal-close{background:none;border:none;color:var(--fg2);cursor:pointer;font-size:18px;padding:2px}
-.modal-body{padding:20px}
-.modal-tabs{display:flex;gap:4px;margin-bottom:20px}
-.modal-tab{
-  flex:1;padding:7px;border-radius:6px;border:none;
-  background:var(--bg2);color:var(--fg2);
-  font-family:var(--mono);font-size:11px;font-weight:700;
-  cursor:pointer;transition:.15s;letter-spacing:.5px;
-}
-.modal-tab.active{background:var(--accent-dim);color:var(--accent)}
-.form-error{
-  background:var(--red-dim);border:1px solid rgba(255,63,91,.2);
-  border-radius:var(--r);padding:8px 12px;
-  font-family:var(--mono);font-size:11px;color:var(--red);
-  margin-bottom:12px;
-}
-.form-success{
-  background:var(--green-dim);border:1px solid rgba(0,229,160,.2);
-  border-radius:var(--r);padding:8px 12px;
-  font-family:var(--mono);font-size:11px;color:var(--green);
-  margin-bottom:12px;
-}
-
-/* ── Toast notifications ─────────────────────────────────────────────────── */
-.toast-container{
-  position:fixed;bottom:24px;right:24px;
-  display:flex;flex-direction:column;gap:8px;
-  z-index:2000;
-}
-.toast{
-  display:flex;align-items:center;gap:10px;
-  padding:10px 16px;border-radius:var(--r);
-  font-family:var(--mono);font-size:12px;
-  animation:slide-in .2s ease;min-width:280px;max-width:380px;
-}
-@keyframes slide-in{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
-.toast-success{background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.25);color:var(--green)}
-.toast-error{background:var(--red-dim);border:1px solid rgba(255,63,91,.25);color:var(--red)}
-.toast-info{background:var(--blue-dim);border:1px solid rgba(77,159,255,.25);color:var(--blue)}
-
-/* ── Empty state ─────────────────────────────────────────────────────────── */
-.empty-state{
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:60px 20px;color:var(--fg3);text-align:center;
-}
-.empty-icon{font-size:48px;margin-bottom:16px;opacity:.3}
-.empty-text{font-family:var(--mono);font-size:13px;letter-spacing:1px}
-
-/* ── TPS sparkline canvas ────────────────────────────────────────────────── */
-.sparkline-wrap{padding:4px 16px 16px}
-#tpsCanvas{width:100%;height:80px;display:block}
-
-/* ── Submissions list ────────────────────────────────────────────────────── */
-.sub-list{display:flex;flex-direction:column;gap:0}
-.sub-row{
-  display:grid;grid-template-columns:1fr auto auto;gap:12px;
-  align-items:center;padding:10px 16px;
-  border-bottom:1px solid var(--line);font-size:12px;
-}
-.sub-row:last-child{border-bottom:none}
-.sub-name{font-weight:600;color:var(--fg)}
-.sub-meta{font-family:var(--mono);font-size:10px;color:var(--fg3);margin-top:2px}
-</style>
+        /* Error Box */
+        .error-banner {
+            background-color: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--accent-red);
+            color: var(--accent-red);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            padding: 12px;
+            border-radius: 4px;
+            margin-top: 16px;
+            display: none;
+        }
+    </style>
 </head>
 <body>
-<div class="app">
 
-<!-- ── Nav ───────────────────────────────────────────────────────────────── -->
-<nav class="nav">
-  <div class="nav-logo">
-    <div class="nav-logo-icon">⚡</div>
-    ORDERFURNACE
-  </div>
-  <div class="nav-tabs">
-    <button class="nav-tab active" onclick="goTo('leaderboard',this)">Leaderboard</button>
-    <button class="nav-tab" onclick="goTo('submit',this)">Submit</button>
-    <button class="nav-tab" onclick="goTo('telemetry',this)">Telemetry</button>
-    <button class="nav-tab" onclick="goTo('sessions',this)">Sessions</button>
-  </div>
-  <div class="nav-right">
-    <div class="conn-pill disconnected" id="ws-status">
-      <div class="conn-dot"></div>
-      <span id="ws-label">DISCONNECTED</span>
-    </div>
-    <div id="auth-area">
-      <button class="btn-auth" onclick="openModal()">Sign In / Register</button>
-    </div>
-  </div>
-</nav>
-
-<!-- ── Pages ──────────────────────────────────────────────────────────────── -->
-<main>
-
-<!-- LEADERBOARD ─────────────────────────────────────────────────────────── -->
-<div class="page active" id="page-leaderboard">
-
-  <!-- Live stat strip -->
-  <div class="stat-grid">
-    <div class="stat" style="--c:var(--accent)">
-      <div class="stat-label">Active Bots</div>
-      <div class="stat-val" id="s-bots">—</div>
-      <div class="stat-sub" id="s-bots-sub">waiting</div>
-    </div>
-    <div class="stat" style="--c:var(--purple)">
-      <div class="stat-label">Orders / sec</div>
-      <div class="stat-val" id="s-tps">—</div>
-      <div class="stat-delta" id="s-tps-delta"></div>
-    </div>
-    <div class="stat" style="--c:var(--green)">
-      <div class="stat-label">p50 Latency</div>
-      <div class="stat-val" id="s-p50">—</div>
-      <div class="stat-sub">microseconds</div>
-    </div>
-    <div class="stat" style="--c:var(--amber)">
-      <div class="stat-label">p99 Latency</div>
-      <div class="stat-val" id="s-p99">—</div>
-      <div class="stat-sub">microseconds</div>
-    </div>
-    <div class="stat" style="--c:var(--blue)">
-      <div class="stat-label">Fill Accuracy</div>
-      <div class="stat-val" id="s-acc">—</div>
-      <div class="stat-sub" id="s-viol">0 violations</div>
-    </div>
-    <div class="stat" style="--c:var(--red)">
-      <div class="stat-label">Contestants</div>
-      <div class="stat-val" id="s-count">0</div>
-      <div class="stat-sub" id="s-running">0 running</div>
-    </div>
-  </div>
-
-  <div class="layout">
-    <!-- Main leaderboard table -->
-    <div>
-      <div class="section-title">Live Rankings</div>
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">Composite Score Leaderboard</span>
-          <div style="display:flex;gap:8px;align-items:center">
-            <span class="badge badge-accent" id="lb-updated">—</span>
-            <span class="badge badge-green" id="lb-count">0 entries</span>
-          </div>
+    <header>
+        <div class="logo">⚡ OrderFurnace</div>
+        <div class="nav-links">
+            <span>Leaderboard</span>
+            <span class="active">Submit</span>
+            <span>Telemetry</span>
+            <span>Sessions</span>
         </div>
-        <div style="overflow-x:auto">
-          <table class="lb-table" id="lb-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Team</th>
-                <th>p50</th>
-                <th>p99</th>
-                <th>TPS</th>
-                <th>Accuracy</th>
-                <th>Score</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody id="lb-body">
-              <tr><td colspan="8">
-                <div class="empty-state">
-                  <div class="empty-icon">📊</div>
-                  <div class="empty-text">Waiting for benchmark data…</div>
+        <div class="user-status">
+            <span class="status-dot"></span> DISCONNECTED
+            <span style="color: var(--accent-brand); margin-left: 16px;">👤 [TerminalSquad]</span>
+            <button onclick="logout()" style="padding: 6px 12px; background: transparent; cursor:pointer; border: 1px solid var(--border-color);">Sign Out</button>
+        </div>
+    </header>
+
+    <main class="grid-container">
+        
+        <section class="panel" style="grid-row: span 2;">
+            <div class="panel-header">
+                <span>Upload Source / Binary</span>
+                <span style="color: var(--accent-amber);">Sandbox Ready</span>
+            </div>
+            
+            <div class="upload-zone" onclick="document.getElementById('file-upload').click()">
+                <div style="color: var(--accent-green); font-size: 24px;">☑</div>
+                <div class="file-name" id="display-file-name">SELECT ZIP FILE</div>
+                <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--text-muted);" id="display-file-size">0.00 MB • ready to upload</div>
+                
+                <input type="file" id="file-upload" accept=".zip,.tar.gz" style="display: none;" onchange="updateFileInfo()">
+                
+                <div class="lang-badges">
+                    <span class="badge rust">Rust</span>
+                    <span class="badge cpp">C++</span>
+                    <span class="badge go">Go</span>
                 </div>
-              </td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- TPS Sparkline -->
-      <div style="margin-top:16px">
-        <div class="section-title">Live Throughput</div>
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">Orders / Second — Rolling 60s</span>
-            <span class="badge badge-green">LIVE</span>
-          </div>
-          <div class="sparkline-wrap">
-            <canvas id="tpsCanvas"></canvas>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Right col -->
-    <div class="right-col">
-      <!-- Score breakdown for #1 -->
-      <div class="section-title">Score Breakdown</div>
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title" id="breakdown-title">—</span>
-          <span class="badge badge-accent" id="breakdown-score">—</span>
-        </div>
-        <div class="breakdown-rows" id="breakdown-rows">
-          <div class="empty-state" style="padding:20px">
-            <div class="empty-text">Select a run</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Bot heatmap -->
-      <div class="section-title">Bot Fleet</div>
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">Worker Activity</span>
-          <span class="badge badge-purple" id="bot-count-badge">0 bots</span>
-        </div>
-        <div class="bot-heatmap" id="bot-heatmap"></div>
-      </div>
-
-      <!-- Workers -->
-      <div class="section-title">Workers</div>
-      <div class="card" id="workers-card">
-        <div class="card-header">
-          <span class="card-title">Connected Workers</span>
-          <span class="badge badge-blue" id="worker-count">0</span>
-        </div>
-        <div id="workers-list" style="padding:0">
-          <div class="empty-state" style="padding:20px">
-            <div class="empty-text">No workers</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div><!-- /page-leaderboard -->
-
-<!-- SUBMIT ──────────────────────────────────────────────────────────────── -->
-<div class="page" id="page-submit">
-  <div class="section-title">Submit Your Engine</div>
-  <div class="layout">
-    <!-- Left: upload form -->
-    <div>
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-header">
-          <span class="card-title">Upload Source / Binary</span>
-          <span class="badge badge-amber">SANDBOX READY</span>
-        </div>
-        <div style="padding:16px;display:flex;flex-direction:column;gap:14px">
-
-          <!-- Drop zone -->
-          <div class="upload-zone" id="dropzone"
-            ondragover="event.preventDefault();this.classList.add('drag')"
-            ondragleave="this.classList.remove('drag')"
-            ondrop="handleDrop(event)"
-            onclick="document.getElementById('file-input').click()">
-            <input type="file" id="file-input" style="display:none" onchange="handleFileSelect(this)">
-            <div class="upload-icon" id="upload-icon">📦</div>
-            <div class="upload-title" id="upload-title">Drop your code here</div>
-            <div class="upload-sub" id="upload-sub">Supported: .zip, .tar.gz, binary · Max 500MB</div>
-            <div class="upload-langs">
-              <span class="lang-tag lang-rust">Rust</span>
-              <span class="lang-tag lang-cpp">C++</span>
-              <span class="lang-tag lang-go">Go</span>
-              <span class="lang-tag lang-c">C</span>
             </div>
-          </div>
 
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-            <div class="form-group">
-              <label class="form-label">Language</label>
-              <select class="form-select" id="f-language">
-                <option value="rust">Rust</option>
-                <option value="cpp">C++</option>
-                <option value="go">Go</option>
-                <option value="c">C</option>
-              </select>
+            <div class="controls-row">
+                <div style="flex: 1;">
+                    <div class="panel-header" style="margin-bottom: 8px;">Language</div>
+                    <select id="language-select" style="width: 100%;">
+                        <option value="go">Go</option>
+                        <option value="cpp">C++</option>
+                        <option value="rust">Rust</option>
+                    </select>
+                </div>
+                <div style="flex: 1;">
+                    <div class="panel-header" style="margin-bottom: 8px;">Endpoint Type</div>
+                    <select id="endpoint-select" style="width: 100%;">
+                        <option value="WebSocket">WS (WebSocket)</option>
+                        <option value="REST">REST API</option>
+                        <option value="FIX">FIX 4.4</option>
+                    </select>
+                </div>
             </div>
-            <div class="form-group">
-              <label class="form-label">Endpoint Type</label>
-              <div class="radio-group" id="endpoint-group">
-                <div class="radio-btn active" onclick="selectEndpoint(this,'WebSocket')">WS</div>
-                <div class="radio-btn" onclick="selectEndpoint(this,'REST')">REST</div>
-                <div class="radio-btn" onclick="selectEndpoint(this,'FIX')">FIX 4.4</div>
-              </div>
+
+            <div class="error-banner" id="error-box"></div>
+
+            <button class="btn-primary" id="deploy-btn" onclick="submitCode()">DEPLOY TO FURNACE</button>
+        </section>
+
+        <section class="panel">
+            <div class="panel-header">
+                <span>Build Pipeline</span>
+                <span style="color: var(--accent-cyan);" id="pipeline-status">IDLE</span>
             </div>
-          </div>
-
-          <div id="submit-error" class="form-error" style="display:none"></div>
-          <div id="submit-success" class="form-success" style="display:none"></div>
-
-          <button class="btn-primary" id="submit-btn" onclick="submitCode()" disabled>
-            <span id="submit-btn-text">SELECT A FILE TO CONTINUE</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- My submissions -->
-      <div class="section-title">My Submissions</div>
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">Submission History</span>
-          <button onclick="loadSubmissions()" style="background:none;border:none;color:var(--fg2);cursor:pointer;font-size:12px">↻ Refresh</button>
-        </div>
-        <div id="sub-list" class="sub-list">
-          <div class="empty-state" style="padding:30px">
-            <div class="empty-icon">📋</div>
-            <div class="empty-text">No submissions yet</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Right: pipeline + sandbox specs -->
-    <div>
-      <div class="section-title">Build Pipeline</div>
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-header">
-          <span class="card-title">Status</span>
-          <span class="badge badge-blue" id="pipeline-badge">IDLE</span>
-        </div>
-        <div style="padding:4px 16px 16px">
-          <div class="pipeline" id="pipeline">
-            <div class="pipeline-step step-waiting" id="step-upload">
-              <div class="pipeline-icon">📤</div>
-              <div><div class="pipeline-name">Upload</div><div class="pipeline-desc">Receiving archive to MinIO</div></div>
-            </div>
-            <div class="pipeline-step step-waiting" id="step-scan">
-              <div class="pipeline-icon">🔍</div>
-              <div><div class="pipeline-name">Security Scan</div><div class="pipeline-desc">ClamAV + reverse shell detection</div></div>
-            </div>
-            <div class="pipeline-step step-waiting" id="step-build">
-              <div class="pipeline-icon">🔨</div>
-              <div><div class="pipeline-name">Build</div><div class="pipeline-desc" id="step-build-desc">Docker multi-stage build</div></div>
-            </div>
-            <div class="pipeline-step step-waiting" id="step-deploy">
-              <div class="pipeline-icon">🚀</div>
-              <div><div class="pipeline-name">Deploy Sandbox</div><div class="pipeline-desc">gVisor · 2vCPU · 4GB · no egress</div></div>
-            </div>
-            <div class="pipeline-step step-waiting" id="step-benchmark">
-              <div class="pipeline-icon">⚡</div>
-              <div><div class="pipeline-name">Benchmark</div><div class="pipeline-desc">Bot fleet deploying…</div></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="section-title">Sandbox Specs</div>
-      <div class="card">
-        <div class="card-body">
-          <div style="display:flex;flex-direction:column;gap:8px;font-family:var(--mono);font-size:11px;color:var(--fg2);line-height:1.8">
-            <div>🔒 <span style="color:var(--fg)">gVisor runsc</span> — kernel boundary isolation</div>
-            <div>🧊 <span style="color:var(--fg)">seccomp-bpf</span> — syscall allowlist only</div>
-            <div>📌 <span style="color:var(--fg)">2 vCPU pinned</span> — no steal time</div>
-            <div>💾 <span style="color:var(--fg)">4 GB RAM</span> — hard cgroup limit (OOM kill)</div>
-            <div>🚫 <span style="color:var(--fg)">Zero egress</span> — no outbound network</div>
-            <div>📁 <span style="color:var(--fg)">Read-only rootfs</span> — 512MB /tmp tmpfs</div>
-            <div>⏱ <span style="color:var(--fg)">300s TTL</span> — auto-killed after benchmark</div>
-            <div>🤖 <span style="color:var(--fg)">2,048 bots</span> — 5 participant types</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div><!-- /page-submit -->
-
-<!-- TELEMETRY ────────────────────────────────────────────────────────────── -->
-<div class="page" id="page-telemetry">
-  <div class="section-title">Live Telemetry Stream</div>
-  <div class="layout">
-    <div>
-      <!-- Live feed -->
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-header">
-          <span class="card-title">Order Event Stream</span>
-          <div style="display:flex;gap:8px">
-            <span class="badge badge-green" id="feed-rate">0 ev/s</span>
-            <span class="badge badge-amber">STREAMING</span>
-          </div>
-        </div>
-        <div style="padding:8px 0 0">
-          <div style="display:grid;grid-template-columns:56px 64px 1fr 72px;gap:8px;padding:4px 16px 8px;border-bottom:1px solid var(--line)">
-            <span style="font-family:var(--mono);font-size:10px;color:var(--fg3)">TIME</span>
-            <span style="font-family:var(--mono);font-size:10px;color:var(--fg3)">TYPE</span>
-            <span style="font-family:var(--mono);font-size:10px;color:var(--fg3)">MESSAGE</span>
-            <span style="font-family:var(--mono);font-size:10px;color:var(--fg3);text-align:right">LATENCY</span>
-          </div>
-          <div class="telem-feed" id="telem-feed"></div>
-        </div>
-      </div>
-
-      <!-- Correctness checks -->
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">Correctness Validation</span>
-          <span class="badge badge-accent">REAL-TIME</span>
-        </div>
-        <div class="correctness-grid">
-          <div class="correctness-item">
-            <div class="correctness-label">Price-Time Priority</div>
-            <div class="correctness-val cv-pass" id="c-ptp">—</div>
-          </div>
-          <div class="correctness-item">
-            <div class="correctness-label">Fill Accuracy</div>
-            <div class="correctness-val cv-pass" id="c-fill">—</div>
-          </div>
-          <div class="correctness-item">
-            <div class="correctness-label">Cancel Acks</div>
-            <div class="correctness-val cv-pass" id="c-cancel">—</div>
-          </div>
-          <div class="correctness-item">
-            <div class="correctness-label">Seq Integrity</div>
-            <div class="correctness-val cv-pass" id="c-seq">—</div>
-          </div>
-        </div>
-        <!-- Violations -->
-        <div style="padding:0 16px 16px">
-          <div style="font-family:var(--mono);font-size:10px;color:var(--fg3);letter-spacing:1px;margin-bottom:8px">RECENT VIOLATIONS</div>
-          <div class="violations-list" id="violations-list">
-            <div style="padding:12px 0;font-family:var(--mono);font-size:11px;color:var(--fg3);text-align:center">No violations detected ✓</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div>
-      <!-- Latency histogram -->
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-header">
-          <span class="card-title">Latency Distribution</span>
-          <span class="badge badge-accent">μs</span>
-        </div>
-        <div class="hist-wrap">
-          <div class="hist-bars" id="hist-bars"></div>
-          <div class="hist-axis">
-            <span>0μs</span><span>1</span><span>2</span><span>5</span><span>10</span><span>25</span><span>100+</span>
-          </div>
-          <div class="hist-legend">
-            <div class="hist-legend-item">
-              <div class="hist-legend-dot" style="background:rgba(232,255,71,.4)"></div>
-              p50: <span id="leg-p50" style="color:var(--fg)">—</span>
-            </div>
-            <div class="hist-legend-item">
-              <div class="hist-legend-dot" style="background:rgba(255,178,36,.6)"></div>
-              p90: <span id="leg-p90" style="color:var(--fg)">—</span>
-            </div>
-            <div class="hist-legend-item">
-              <div class="hist-legend-dot" style="background:rgba(255,63,91,.6)"></div>
-              p99: <span id="leg-p99" style="color:var(--fg)">—</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Per-session metrics from /v1/metrics/:session_id -->
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">Session Raw Metrics</span>
-          <span class="badge badge-blue">Redis → Scoring</span>
-        </div>
-        <div style="padding:16px;display:flex;flex-direction:column;gap:10px">
-          <div class="form-group" style="margin:0">
-            <label class="form-label">Session ID</label>
-            <div style="display:flex;gap:8px">
-              <input class="form-input" id="metrics-session-input" placeholder="paste session_id…" style="flex:1"/>
-              <button onclick="loadSessionMetrics()" style="padding:8px 14px;background:var(--accent-dim);border:1px solid rgba(232,255,71,.2);border-radius:var(--r);color:var(--accent);font-family:var(--mono);font-size:11px;cursor:pointer">FETCH</button>
-            </div>
-          </div>
-          <div id="session-metrics-out" style="font-family:var(--mono);font-size:11px;color:var(--fg2);background:var(--bg2);border-radius:var(--r);padding:12px;min-height:60px;line-height:1.9"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div><!-- /page-telemetry -->
-
-<!-- SESSIONS ────────────────────────────────────────────────────────────── -->
-<div class="page" id="page-sessions">
-  <div class="section-title">Benchmark Sessions</div>
-  <div style="display:grid;grid-template-columns:1fr 360px;gap:16px">
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title">All Sessions</span>
-        <button onclick="loadSessions()" style="background:none;border:none;color:var(--fg2);cursor:pointer;font-size:12px">↻ Refresh</button>
-      </div>
-      <div id="sessions-list">
-        <div class="empty-state" style="padding:40px">
-          <div class="empty-icon">🏃</div>
-          <div class="empty-text">No sessions found</div>
-        </div>
-      </div>
-    </div>
-    <!-- Manual session start (for dev) -->
-    <div>
-      <div class="section-title">Start Session</div>
-      <div class="card">
-        <div class="card-header"><span class="card-title">Manual Trigger</span></div>
-        <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
-          <div class="form-group" style="margin:0">
-            <label class="form-label">Submission ID</label>
-            <input class="form-input" id="sess-sub-id" placeholder="submission_id"/>
-          </div>
-          <div class="form-group" style="margin:0">
-            <label class="form-label">Target URL</label>
-            <input class="form-input" id="sess-url" placeholder="ws://localhost:8080"/>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <div>
-              <label class="form-label">Bot Count</label>
-              <input class="form-input" id="sess-bots" value="2048" type="number"/>
-            </div>
-            <div>
-              <label class="form-label">Duration (s)</label>
-              <input class="form-input" id="sess-dur" value="300" type="number"/>
-            </div>
-          </div>
-          <button class="btn-primary" onclick="startSession()">START BENCHMARK</button>
-          <div id="sess-result" style="font-family:var(--mono);font-size:11px;color:var(--fg2)"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div><!-- /page-sessions -->
-
-</main>
-</div><!-- /app -->
-
-<!-- ── Auth Modal ─────────────────────────────────────────────────────────── -->
-<div class="modal-backdrop" id="modal">
-  <div class="modal">
-    <div class="modal-header">
-      <span class="modal-title">AUTHENTICATE</span>
-      <button class="modal-close" onclick="closeModal()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="modal-tabs">
-        <button class="modal-tab active" onclick="switchAuthTab('login',this)">Sign In</button>
-        <button class="modal-tab" onclick="switchAuthTab('register',this)">Register</button>
-      </div>
-      <div id="auth-error" class="form-error" style="display:none"></div>
-      <div id="auth-success" class="form-success" style="display:none"></div>
-      <div class="form-group">
-        <label class="form-label">Team Name</label>
-        <input class="form-input" id="auth-team" placeholder="e.g. WarpSpeed Labs" autocomplete="username"/>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Password</label>
-        <input class="form-input" type="password" id="auth-pass" placeholder="••••••••" autocomplete="current-password"/>
-      </div>
-      <button class="btn-primary" id="auth-btn" onclick="submitAuth()">SIGN IN</button>
-    </div>
-  </div>
-</div>
-
-<!-- ── Toast container ────────────────────────────────────────────────────── -->
-<div class="toast-container" id="toasts"></div>
-
-<script>
-// ═══════════════════════════════════════════════════════════════════════════
-// CONFIG — change API_BASE to your api-gateway address
-// ═══════════════════════════════════════════════════════════════════════════
-const API_BASE = window.OF_API_BASE || 'http://localhost:8000';
-const WS_BASE  = window.OF_WS_BASE  || 'ws://localhost:8001';
-
-// ═══════════════════════════════════════════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════════════════════════════════════════
-const state = {
-  token: localStorage.getItem('of_token') || null,
-  teamName: localStorage.getItem('of_team') || null,
-  authMode: 'login',
-  selectedEndpoint: 'WebSocket',
-  selectedFile: null,
-  submissionID: null,
-  activeSessionID: null,
-  ws: null,
-  wsRetries: 0,
-  leaderboard: [],
-  telemetryEvents: [],
-  tpsHistory: new Array(60).fill(0),
-  violations: [],
-  feedCount: 0,
-  feedTimer: null,
-  prevTPS: 0,
-};
-
-// ═══════════════════════════════════════════════════════════════════════════
-// BOOT
-// ═══════════════════════════════════════════════════════════════════════════
-document.addEventListener('DOMContentLoaded', () => {
-  renderAuthArea();
-  initBotHeatmap();
-  initSparkline();
-  initHistogram();
-  connectWS();
-  // Poll leaderboard every 5s as fallback even without WS
-  setInterval(fetchLeaderboard, 5000);
-  fetchLeaderboard();
-  // Poll workers every 3s
-  setInterval(fetchWorkers, 3000);
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// NAVIGATION
-// ═══════════════════════════════════════════════════════════════════════════
-function goTo(page, btn) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-  document.getElementById('page-' + page).classList.add('active');
-  btn.classList.add('active');
-  if (page === 'sessions') loadSessions();
-  if (page === 'submit' && state.token) loadSubmissions();
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// AUTH
-// ═══════════════════════════════════════════════════════════════════════════
-function renderAuthArea() {
-  const el = document.getElementById('auth-area');
-  if (state.token) {
-    el.innerHTML = `<div class="team-badge">🏆 ${state.teamName || 'Team'}</div>
-      <button class="btn-auth" onclick="logout()" style="font-size:11px">Sign Out</button>`;
-  } else {
-    el.innerHTML = `<button class="btn-auth" onclick="openModal()">Sign In / Register</button>`;
-  }
-}
-
-function openModal() { document.getElementById('modal').classList.add('open'); }
-function closeModal() { document.getElementById('modal').classList.remove('open'); }
-
-function switchAuthTab(mode, btn) {
-  state.authMode = mode;
-  document.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('auth-btn').textContent = mode === 'login' ? 'SIGN IN' : 'REGISTER';
-  document.getElementById('auth-error').style.display = 'none';
-  document.getElementById('auth-success').style.display = 'none';
-}
-
-async function submitAuth() {
-  const team = document.getElementById('auth-team').value.trim();
-  const pass = document.getElementById('auth-pass').value;
-  const errEl = document.getElementById('auth-error');
-  const sucEl = document.getElementById('auth-success');
-  errEl.style.display = 'none';
-  sucEl.style.display = 'none';
-
-  if (!team || !pass) { showAuthError('Fill in all fields'); return; }
-
-  const url = state.authMode === 'login'
-    ? `${API_BASE}/v1/auth/login`
-    : `${API_BASE}/v1/auth/register`;
-
-  try {
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({team_name: team, password: pass})
-    });
-    const data = await r.json();
-    if (!r.ok) { showAuthError(data.error || 'Auth failed'); return; }
-
-    state.token = data.token;
-    state.teamName = team;
-    localStorage.setItem('of_token', data.token);
-    localStorage.setItem('of_team', team);
-
-    sucEl.textContent = state.authMode === 'login' ? 'Signed in!' : 'Registered!';
-    sucEl.style.display = 'block';
-    renderAuthArea();
-    setTimeout(closeModal, 800);
-    toast(`Welcome, ${team}!`, 'success');
-    loadSubmissions();
-  } catch(e) {
-    // Backend not reachable — mock for demo
-    state.token = 'demo-token';
-    state.teamName = team;
-    localStorage.setItem('of_token', 'demo-token');
-    localStorage.setItem('of_team', team);
-    renderAuthArea();
-    setTimeout(closeModal, 500);
-    toast(`Signed in as ${team} (demo mode)`, 'info');
-  }
-}
-
-function showAuthError(msg) {
-  const el = document.getElementById('auth-error');
-  el.textContent = msg; el.style.display = 'block';
-}
-
-function logout() {
-  state.token = null; state.teamName = null;
-  localStorage.removeItem('of_token'); localStorage.removeItem('of_team');
-  renderAuthArea();
-  toast('Signed out', 'info');
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// WEBSOCKET — connects to ws-gateway /v1/stream
-// Receives leaderboard:updates and telemetry:updates from Redis Pub/Sub
-// ═══════════════════════════════════════════════════════════════════════════
-function connectWS() {
-  setWSStatus('connecting');
-  const url = `${WS_BASE}/v1/stream`;
-  let ws;
-  try {
-    ws = new WebSocket(url);
-  } catch(e) {
-    setWSStatus('disconnected');
-    scheduleReconnect();
-    return;
-  }
-  state.ws = ws;
-
-  ws.onopen = () => {
-    setWSStatus('connected');
-    state.wsRetries = 0;
-    toast('Live stream connected', 'success');
-  };
-
-  ws.onmessage = (evt) => {
-    try {
-      const msg = JSON.parse(evt.data);
-      handleWSMessage(msg);
-    } catch(e) {}
-  };
-
-  ws.onclose = () => {
-    setWSStatus('disconnected');
-    scheduleReconnect();
-  };
-
-  ws.onerror = () => {
-    setWSStatus('disconnected');
-  };
-}
-
-function scheduleReconnect() {
-  state.wsRetries++;
-  const delay = Math.min(2000 * state.wsRetries, 30000);
-  setTimeout(connectWS, delay);
-}
-
-function setWSStatus(status) {
-  const pill = document.getElementById('ws-status');
-  const label = document.getElementById('ws-label');
-  pill.className = 'conn-pill ' + status;
-  label.textContent = status.toUpperCase();
-}
-
-// Handle incoming WS messages from ws-gateway
-// ws-gateway publishes two channels: leaderboard:updates and telemetry:updates
-function handleWSMessage(msg) {
-  // Leaderboard snapshot from scoring-service → Redis Pub/Sub → ws-gateway
-  if (msg.entries !== undefined) {
-    updateLeaderboard(msg);
-    return;
-  }
-  // Telemetry event from telemetry-service → Redis Pub/Sub → ws-gateway
-  if (msg.session_id && msg.event_type) {
-    addTelemEvent(msg);
-    updateCorrectnessPanel(msg);
-    updateHistogram(msg);
-    return;
-  }
-  // Session metrics update
-  if (msg.tps !== undefined && !msg.entries) {
-    updateStatStrip(msg);
-    return;
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// LEADERBOARD — GET /v1/leaderboard (scoring-service)
-// Response: { entries: LeaderboardEntry[], count: int, updated_at: string }
-// LeaderboardEntry fields: session_id, team_name, language, composite_score,
-//   throughput_score, latency_score, correctness_score, stability_score,
-//   p50_ns, p90_ns, p99_ns, tps, fill_acc_pct, violations, status
-// ═══════════════════════════════════════════════════════════════════════════
-async function fetchLeaderboard() {
-  try {
-    const r = await fetch(`${API_BASE}/v1/leaderboard`);
-    if (!r.ok) return;
-    const data = await r.json();
-    updateLeaderboard(data);
-  } catch(e) {
-    // silently fail — WS will provide live data when connected
-  }
-}
-
-function updateLeaderboard(data) {
-  const entries = data.entries || [];
-  state.leaderboard = entries;
-
-  // Update stat strip
-  const running = entries.filter(e => e.status === 'running');
-  document.getElementById('s-count').textContent = entries.length;
-  document.getElementById('s-running').textContent = `${running.length} running`;
-  document.getElementById('lb-count').textContent = `${entries.length} entries`;
-  document.getElementById('lb-updated').textContent = 'LIVE';
-
-  if (entries.length === 0) {
-    document.getElementById('lb-body').innerHTML = `<tr><td colspan="8">
-      <div class="empty-state"><div class="empty-icon">📊</div>
-      <div class="empty-text">No benchmark data yet</div></div></td></tr>`;
-    return;
-  }
-
-  // Update stat strip from top entry
-  const top = entries[0];
-  if (top) {
-    document.getElementById('s-p50').textContent = fmtNS(top.p50_ns);
-    document.getElementById('s-p99').textContent = fmtNS(top.p99_ns);
-    document.getElementById('s-acc').textContent = top.fill_acc_pct ? top.fill_acc_pct.toFixed(2) + '%' : '—';
-    document.getElementById('s-viol').textContent = (top.violations || 0) + ' violations';
-    const tps = top.tps || 0;
-    document.getElementById('s-tps').textContent = fmtTPS(tps);
-    const delta = tps - state.prevTPS;
-    const deltaEl = document.getElementById('s-tps-delta');
-    deltaEl.textContent = delta >= 0 ? `↑ ${fmtTPS(delta)}` : `↓ ${fmtTPS(Math.abs(delta))}`;
-    deltaEl.className = 'stat-delta ' + (delta >= 0 ? 'delta-up' : 'delta-dn');
-    state.prevTPS = tps;
-    updateTPS(tps);
-    renderBreakdown(top);
-  }
-
-  // Render table rows
-  const scoreColors = ['#f5a623','#b4bed2','#c47a45'];
-  document.getElementById('lb-body').innerHTML = entries.map((e, i) => {
-    const rank = i + 1;
-    const rankCls = rank <= 3 ? `rank-${rank}` : 'rank-n';
-    const score = e.composite_score || 0;
-    const color = scoreColors[i] || 'var(--accent)';
-    const langCls = 'lang-' + (e.language || 'go').toLowerCase().replace('+','p').replace('++','pp');
-    return `<tr class="lb-row" onclick="selectEntry('${e.session_id}')">
-      <td><div class="rank-medal ${rankCls}">${rank}</div></td>
-      <td><div class="team-cell">
-        <span class="team-name">${esc(e.team_name || '—')}</span>
-        <span class="lang-tag ${langCls}">${esc(e.language || '—')}</span>
-      </div></td>
-      <td><span class="mono-cell">${fmtNS(e.p50_ns)}</span></td>
-      <td><span class="mono-cell">${fmtNS(e.p99_ns)}</span></td>
-      <td><span class="mono-cell">${fmtTPS(e.tps)}</span></td>
-      <td><span class="mono-cell ${e.fill_acc_pct > 99.9 ? '' : 'muted'}">${e.fill_acc_pct ? e.fill_acc_pct.toFixed(2)+'%' : '—'}</span></td>
-      <td>
-        <div class="score-cell">
-          <div class="score-bar-bg">
-            <div class="score-bar-fill" style="width:${score}%;background:${color}"></div>
-          </div>
-          <span class="score-num" style="color:${color}">${score.toFixed(1)}</span>
-        </div>
-      </td>
-      <td><div class="status-cell s-${e.status}">
-        <div class="status-dot"></div>${(e.status||'—').toUpperCase()}
-      </div></td>
-    </tr>`;
-  }).join('');
-}
-
-function selectEntry(sessionID) {
-  const entry = state.leaderboard.find(e => e.session_id === sessionID);
-  if (entry) renderBreakdown(entry);
-  state.activeSessionID = sessionID;
-  document.getElementById('metrics-session-input').value = sessionID;
-}
-
-function renderBreakdown(entry) {
-  document.getElementById('breakdown-title').textContent = entry.team_name || '—';
-  document.getElementById('breakdown-score').textContent = (entry.composite_score || 0).toFixed(1);
-
-  const dims = [
-    { name: 'Throughput',   val: entry.throughput_score   || 0, color: 'var(--accent)' },
-    { name: 'Latency p99',  val: entry.latency_score      || 0, color: 'var(--green)'  },
-    { name: 'Correctness',  val: entry.correctness_score  || 0, color: 'var(--blue)'   },
-    { name: 'Stability',    val: entry.stability_score    || 0, color: 'var(--amber)'  },
-  ];
-  document.getElementById('breakdown-rows').innerHTML = dims.map(d => `
-    <div class="breakdown-row">
-      <div class="breakdown-label">
-        <span class="breakdown-name">${d.name}</span>
-        <span class="breakdown-val" style="color:${d.color}">${d.val.toFixed(1)}</span>
-      </div>
-      <div class="breakdown-bar">
-        <div class="breakdown-fill" style="width:${d.val}%;background:${d.color}"></div>
-      </div>
-    </div>`).join('');
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// SUBMIT — POST /v1/submissions (multipart/form-data)
-// Required fields: file (binary), language, endpoint_type
-// Response: { submission_id, status, message }
-// ═══════════════════════════════════════════════════════════════════════════
-function handleFileSelect(input) {
-  if (input.files[0]) setFile(input.files[0]);
-}
-
-function handleDrop(e) {
-  e.preventDefault();
-  document.getElementById('dropzone').classList.remove('drag');
-  if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
-}
-
-function setFile(file) {
-  state.selectedFile = file;
-  document.getElementById('dropzone').classList.add('has-file');
-  document.getElementById('upload-icon').textContent = '✅';
-  document.getElementById('upload-title').textContent = file.name;
-  document.getElementById('upload-sub').textContent =
-    `${(file.size / 1024 / 1024).toFixed(2)} MB · ready to upload`;
-  document.getElementById('submit-btn').disabled = !state.token;
-  document.getElementById('submit-btn-text').textContent =
-    state.token ? 'SUBMIT & BENCHMARK' : 'SIGN IN TO SUBMIT';
-}
-
-function selectEndpoint(btn, val) {
-  document.querySelectorAll('#endpoint-group .radio-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  state.selectedEndpoint = val;
-}
-
-async function submitCode() {
-  if (!state.selectedFile) { toast('Select a file first', 'error'); return; }
-  if (!state.token) { openModal(); return; }
-
-  const btn = document.getElementById('submit-btn');
-  const errEl = document.getElementById('submit-error');
-  const sucEl = document.getElementById('submit-success');
-  errEl.style.display = 'none';
-  sucEl.style.display = 'none';
-  btn.disabled = true;
-  document.getElementById('submit-btn-text').textContent = 'UPLOADING…';
-
-  // Animate pipeline
-  setPipelineStep('step-upload', 'active');
-
-  const form = new FormData();
-  form.append('file', state.selectedFile);
-  form.append('language', document.getElementById('f-language').value);
-  form.append('endpoint_type', state.selectedEndpoint);
-
-  try {
-    const r = await fetch(`${API_BASE}/v1/submissions`, {
-      method: 'POST',
-      headers: {'Authorization': `Bearer ${state.token}`},
-      body: form,
-    });
-    const data = await r.json();
-
-    if (!r.ok) {
-      errEl.textContent = data.error || 'Submission failed';
-      errEl.style.display = 'block';
-      setPipelineStep('step-upload', 'error');
-      btn.disabled = false;
-      document.getElementById('submit-btn-text').textContent = 'RETRY';
-      return;
-    }
-
-    state.submissionID = data.submission_id;
-    sucEl.textContent = `Submitted! ID: ${data.submission_id}`;
-    sucEl.style.display = 'block';
-
-    setPipelineStep('step-upload', 'done');
-    document.getElementById('pipeline-badge').textContent = 'BUILDING';
-    document.getElementById('pipeline-badge').className = 'badge badge-amber';
-
-    toast(`Submission received — ${data.submission_id.slice(0,8)}`, 'success');
-
-    // Poll submission status to drive pipeline UI
-    pollSubmissionStatus(data.submission_id);
-    loadSubmissions();
-    btn.disabled = false;
-    document.getElementById('submit-btn-text').textContent = 'SUBMIT ANOTHER';
-
-  } catch(e) {
-    // Demo mode — simulate pipeline
-    simulatePipeline();
-    sucEl.textContent = 'Demo mode: pipeline simulated (backend offline)';
-    sucEl.style.display = 'block';
-    btn.disabled = false;
-    document.getElementById('submit-btn-text').textContent = 'SUBMIT ANOTHER';
-  }
-}
-
-async function pollSubmissionStatus(id) {
-  const maxAttempts = 60;
-  let attempts = 0;
-  const statusToStep = {
-    'pending':        () => setPipelineStep('step-scan', 'active'),
-    'building':       () => { setPipelineStep('step-scan','done'); setPipelineStep('step-build','active'); document.getElementById('step-build-desc').textContent = `Building ${document.getElementById('f-language').value} image…`; },
-    'deploying':      () => { setPipelineStep('step-build','done'); setPipelineStep('step-deploy','active'); },
-    'running':        () => { setPipelineStep('step-deploy','done'); setPipelineStep('step-benchmark','active'); document.getElementById('pipeline-badge').textContent='RUNNING'; document.getElementById('pipeline-badge').className='badge badge-green'; },
-    'build_failed':   () => { setPipelineStep('step-build','error'); document.getElementById('pipeline-badge').textContent='BUILD FAILED'; document.getElementById('pipeline-badge').className='badge badge-red'; },
-    'deploy_failed':  () => { setPipelineStep('step-deploy','error'); document.getElementById('pipeline-badge').textContent='DEPLOY FAILED'; document.getElementById('pipeline-badge').className='badge badge-red'; },
-  };
-
-  const poll = async () => {
-    if (attempts++ > maxAttempts) return;
-    try {
-      const r = await fetch(`${API_BASE}/v1/submissions/${id}`, {
-        headers: {'Authorization': `Bearer ${state.token}`}
-      });
-      const sub = await r.json();
-      if (statusToStep[sub.status]) statusToStep[sub.status]();
-      if (sub.status === 'running') {
-        toast('Benchmark started! Watch the leaderboard.', 'success');
-        return;
-      }
-      if (!['build_failed','deploy_failed'].includes(sub.status)) {
-        setTimeout(poll, 3000);
-      }
-    } catch(e) { setTimeout(poll, 3000); }
-  };
-  poll();
-}
-
-function setPipelineStep(id, state) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.className = 'pipeline-step step-' + state;
-  const icon = el.querySelector('.pipeline-icon');
-  const icons = {upload:'📤',scan:'🔍',build:'🔨',deploy:'🚀',benchmark:'⚡'};
-  const doneIcons = {upload:'✅',scan:'✅',build:'✅',deploy:'✅',benchmark:'⚡'};
-  const stepKey = id.replace('step-','');
-  if (state === 'done') icon.textContent = doneIcons[stepKey] || '✅';
-  else if (state === 'error') icon.textContent = '❌';
-}
-
-function simulatePipeline() {
-  const steps = ['step-upload','step-scan','step-build','step-deploy','step-benchmark'];
-  let i = 0;
-  setPipelineStep(steps[0], 'active');
-  const iv = setInterval(() => {
-    setPipelineStep(steps[i], 'done');
-    i++;
-    if (i < steps.length) setPipelineStep(steps[i], 'active');
-    else { clearInterval(iv); document.getElementById('pipeline-badge').textContent='RUNNING'; document.getElementById('pipeline-badge').className='badge badge-green'; }
-  }, 900);
-}
-
-// GET /v1/submissions — list team's submissions
-async function loadSubmissions() {
-  if (!state.token) return;
-  try {
-    const r = await fetch(`${API_BASE}/v1/submissions`, {
-      headers: {'Authorization': `Bearer ${state.token}`}
-    });
-    const data = await r.json();
-    const subs = data.submissions || [];
-    const el = document.getElementById('sub-list');
-    if (!subs.length) {
-      el.innerHTML = `<div class="empty-state" style="padding:30px"><div class="empty-icon">📋</div><div class="empty-text">No submissions yet</div></div>`;
-      return;
-    }
-    const statusBadge = s => ({
-      pending:'badge-amber',building:'badge-amber',deploying:'badge-amber',
-      running:'badge-green',done:'badge-blue',
-      build_failed:'badge-red',deploy_failed:'badge-red'
-    }[s] || 'badge-blue');
-    el.innerHTML = subs.map(s => `
-      <div class="sub-row">
-        <div>
-          <div class="sub-name">${esc(s.team_name || '—')}</div>
-          <div class="sub-meta">${s.submission_id.slice(0,8)} · ${s.language} · ${s.endpoint_type}</div>
-        </div>
-        <span class="badge ${statusBadge(s.status)}">${s.status.toUpperCase()}</span>
-        <span style="font-family:var(--mono);font-size:10px;color:var(--fg3)">${fmtDate(s.created_at)}</span>
-      </div>`).join('');
-  } catch(e) {}
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// TELEMETRY — fed by WS stream from ws-gateway
-// Events: TelemetryEvent { session_id, order_id, event_type, latency_ns,
-//   side, order_type, price, qty, fill_price, fill_qty, violation, violation_msg }
-// ═══════════════════════════════════════════════════════════════════════════
-let feedEventsPerSec = 0;
-setInterval(() => {
-  document.getElementById('feed-rate').textContent = feedEventsPerSec + ' ev/s';
-  feedEventsPerSec = 0;
-}, 1000);
-
-function addTelemEvent(e) {
-  feedEventsPerSec++;
-  const feed = document.getElementById('telem-feed');
-  const now = new Date();
-  const ts = now.toTimeString().slice(0,8);
-  const latUs = e.latency_ns ? (e.latency_ns / 1000).toFixed(1) : '—';
-  const latCls = e.latency_ns < 5000 ? 'fast' : e.latency_ns > 50000 ? 'slow' : '';
-  const msg = `${e.side||'?'}${e.order_type||'?'} ${e.qty||0}@${(e.price||0).toFixed(2)} id:${(e.order_id||'').slice(0,6)}`;
-
-  const row = document.createElement('div');
-  row.className = 'telem-entry';
-  row.innerHTML = `
-    <span class="telem-ts">${ts}</span>
-    <span class="telem-type type-${e.event_type}">${e.event_type}</span>
-    <span class="telem-msg">${esc(msg)}</span>
-    <span class="telem-lat ${latCls}">${latUs}μs</span>`;
-  feed.insertBefore(row, feed.firstChild);
-  while (feed.children.length > 80) feed.removeChild(feed.lastChild);
-
-  // Violations
-  if (e.violation) {
-    state.violations.unshift(e);
-    renderViolations();
-  }
-}
-
-function renderViolations() {
-  const el = document.getElementById('violations-list');
-  if (!state.violations.length) {
-    el.innerHTML = `<div style="padding:12px 0;font-family:var(--mono);font-size:11px;color:var(--fg3);text-align:center">No violations detected ✓</div>`;
-    return;
-  }
-  el.innerHTML = state.violations.slice(0,20).map(v => `
-    <div class="violation-row">
-      <span class="v-icon">⚠</span>
-      <span class="v-msg">${esc(v.violation_msg || 'unknown violation')}</span>
-      <span class="v-time">${(v.latency_ns/1000).toFixed(1)}μs</span>
-    </div>`).join('');
-}
-
-function updateCorrectnessPanel(e) {
-  // Price-time priority
-  const ptpEl = document.getElementById('c-ptp');
-  const hasPTP = state.violations.some(v => v.violation_msg && v.violation_msg.includes('priority'));
-  ptpEl.textContent = hasPTP ? '⚠ VIOLATION' : '✓ PASS';
-  ptpEl.className = 'correctness-val ' + (hasPTP ? 'cv-fail' : 'cv-pass');
-
-  // Fill accuracy from leaderboard top entry
-  const top = state.leaderboard[0];
-  if (top) {
-    const fillEl = document.getElementById('c-fill');
-    fillEl.textContent = top.fill_acc_pct ? top.fill_acc_pct.toFixed(2) + '%' : '—';
-    fillEl.className = 'correctness-val ' + (top.fill_acc_pct > 99.9 ? 'cv-pass' : 'cv-warn');
-    document.getElementById('leg-p50').textContent = fmtNS(top.p50_ns);
-    document.getElementById('leg-p90').textContent = fmtNS(top.p90_ns || 0);
-    document.getElementById('leg-p99').textContent = fmtNS(top.p99_ns);
-  }
-
-  // Cancel acks — track cancel responses
-  const cancelTotal = state.telemetryEvents.filter(x => x.order_type === 'C').length;
-  const cancelAcked = state.telemetryEvents.filter(x => x.order_type === 'C' && x.event_type === 'CANCEL').length;
-  document.getElementById('c-cancel').textContent = cancelTotal > 0
-    ? ((cancelAcked/cancelTotal)*100).toFixed(1) + '%' : '—';
-
-  // Seq integrity
-  const seqViol = state.violations.filter(v => v.violation_msg && v.violation_msg.includes('seq')).length;
-  const seqEl = document.getElementById('c-seq');
-  seqEl.textContent = seqViol > 0 ? `⚠ ${seqViol} GAP${seqViol>1?'S':''}` : '✓ CLEAN';
-  seqEl.className = 'correctness-val ' + (seqViol > 0 ? 'cv-warn' : 'cv-pass');
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// HISTOGRAM — driven by latency_ns values from WS telemetry events
-// ═══════════════════════════════════════════════════════════════════════════
-const histBuckets = [0,500,1000,1500,2000,3000,5000,7500,10000,15000,25000,50000,100000,250000,500000,Infinity];
-const histCounts = new Array(histBuckets.length - 1).fill(0);
-
-function initHistogram() {
-  const el = document.getElementById('hist-bars');
-  el.innerHTML = histCounts.map((_,i) => {
-    const cls = i >= 13 ? 'hist-bar p99' : i >= 10 ? 'hist-bar p90' : 'hist-bar';
-    return `<div class="${cls}" style="height:4px" id="hb-${i}"></div>`;
-  }).join('');
-}
-
-function updateHistogram(e) {
-  if (!e.latency_ns) return;
-  for (let i = 0; i < histBuckets.length - 1; i++) {
-    if (e.latency_ns >= histBuckets[i] && e.latency_ns < histBuckets[i+1]) {
-      histCounts[i]++;
-      break;
-    }
-  }
-  const max = Math.max(...histCounts, 1);
-  histCounts.forEach((c, i) => {
-    const bar = document.getElementById('hb-' + i);
-    if (bar) bar.style.height = Math.max(4, (c / max) * 100) + '%';
-  });
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// TPS SPARKLINE
-// ═══════════════════════════════════════════════════════════════════════════
-let sparkChart;
-function initSparkline() {
-  const canvas = document.getElementById('tpsCanvas');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const labels = new Array(60).fill('');
-
-  sparkChart = {
-    canvas, ctx, labels,
-    data: new Array(60).fill(0),
-    draw() {
-      const W = canvas.offsetWidth * devicePixelRatio;
-      const H = canvas.offsetHeight * devicePixelRatio;
-      canvas.width = W; canvas.height = H;
-      ctx.clearRect(0,0,W,H);
-      const max = Math.max(...this.data, 1);
-      const step = W / (this.data.length - 1);
-      // gradient fill
-      const grad = ctx.createLinearGradient(0,0,0,H);
-      grad.addColorStop(0, 'rgba(232,255,71,0.2)');
-      grad.addColorStop(1, 'rgba(232,255,71,0)');
-      ctx.beginPath();
-      this.data.forEach((v,i) => {
-        const x = i * step;
-        const y = H - (v/max) * H * 0.9 - H*0.05;
-        i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
-      });
-      ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
-      ctx.fillStyle = grad; ctx.fill();
-      // line
-      ctx.beginPath();
-      this.data.forEach((v,i) => {
-        const x = i * step;
-        const y = H - (v/max) * H * 0.9 - H*0.05;
-        i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
-      });
-      ctx.strokeStyle = 'rgba(232,255,71,0.8)';
-      ctx.lineWidth = 1.5 * devicePixelRatio;
-      ctx.stroke();
-    }
-  };
-}
-
-function updateTPS(tps) {
-  if (!sparkChart) return;
-  sparkChart.data.push(tps);
-  if (sparkChart.data.length > 60) sparkChart.data.shift();
-  sparkChart.draw();
-  document.getElementById('s-tps').textContent = fmtTPS(tps);
-  document.getElementById('s-bots').textContent = '2,048';
-  document.getElementById('s-bots-sub').textContent = 'active';
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// BOT HEATMAP
-// ═══════════════════════════════════════════════════════════════════════════
-function initBotHeatmap() {
-  const grid = document.getElementById('bot-heatmap');
-  grid.innerHTML = '';
-  for (let i = 0; i < 128; i++) {
-    const c = document.createElement('div');
-    c.className = 'bot-cell';
-    c.id = 'bc-' + i;
-    grid.appendChild(c);
-  }
-  animateBots();
-}
-
-function animateBots() {
-  const count = Math.floor(Math.random() * 8) + 3;
-  for (let i = 0; i < count; i++) {
-    const idx = Math.floor(Math.random() * 128);
-    const cell = document.getElementById('bc-' + idx);
-    if (!cell) continue;
-    cell.className = 'bot-cell hot';
-    setTimeout(() => {
-      cell.className = 'bot-cell warm';
-      setTimeout(() => cell.className = 'bot-cell cool', 300);
-      setTimeout(() => cell.className = 'bot-cell', 600);
-    }, 100);
-  }
-  setTimeout(animateBots, 60 + Math.random() * 80);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// STAT STRIP — updated by WS messages or leaderboard fetches
-// ═══════════════════════════════════════════════════════════════════════════
-function updateStatStrip(metrics) {
-  if (metrics.p50_ns) document.getElementById('s-p50').textContent = fmtNS(metrics.p50_ns);
-  if (metrics.p99_ns) document.getElementById('s-p99').textContent = fmtNS(metrics.p99_ns);
-  if (metrics.tps) updateTPS(metrics.tps);
-  if (metrics.fill_acc_pct) {
-    document.getElementById('s-acc').textContent = parseFloat(metrics.fill_acc_pct).toFixed(2) + '%';
-  }
-  if (metrics.violations !== undefined) {
-    document.getElementById('s-viol').textContent = metrics.violations + ' violations';
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// WORKERS — GET /api/workers (bot-orchestrator, via api-gateway)
-// ═══════════════════════════════════════════════════════════════════════════
-async function fetchWorkers() {
-  try {
-    const r = await fetch(`${API_BASE}/api/workers`, {
-      headers: state.token ? {'Authorization':`Bearer ${state.token}`} : {}
-    });
-    if (!r.ok) return;
-    const data = await r.json();
-    renderWorkers(data.workers || []);
-    document.getElementById('worker-count').textContent = data.count || 0;
-    const totalBots = (data.workers || []).reduce((s, w) => s + (w.ActiveBots||0), 0);
-    document.getElementById('s-bots').textContent = totalBots || '—';
-    document.getElementById('bot-count-badge').textContent = totalBots + ' bots';
-  } catch(e) {}
-}
-
-function renderWorkers(workers) {
-  const el = document.getElementById('workers-list');
-  if (!workers.length) {
-    el.innerHTML = `<div class="empty-state" style="padding:20px"><div class="empty-text">No workers connected</div></div>`;
-    return;
-  }
-  el.innerHTML = workers.map(w => `
-    <div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:8px 16px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:11px">
-      <div>
-        <div style="color:var(--fg);margin-bottom:2px">${(w.WorkerID||'').slice(0,12)}</div>
-        <div style="color:var(--fg3)">${w.ActiveBots||0} bots · ${fmtNum(w.OrdersSent||0)} orders</div>
-      </div>
-      <span class="badge badge-green">LIVE</span>
-    </div>`).join('');
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// SESSIONS PAGE — GET /api/sessions (bot-orchestrator)
-// ═══════════════════════════════════════════════════════════════════════════
-async function loadSessions() {
-  try {
-    const r = await fetch(`${API_BASE}/api/sessions`, {
-      headers: state.token ? {'Authorization':`Bearer ${state.token}`} : {}
-    });
-    if (!r.ok) return;
-    const data = await r.json();
-    const sessions = data.sessions || [];
-    const el = document.getElementById('sessions-list');
-    if (!sessions.length) {
-      el.innerHTML = `<div class="empty-state" style="padding:40px"><div class="empty-icon">🏃</div><div class="empty-text">No sessions found</div></div>`;
-      return;
-    }
-    const sBadge = s => ({running:'badge-green',done:'badge-blue',pending:'badge-amber',error:'badge-red'}[s]||'badge-blue');
-    el.innerHTML = sessions.map(s => `
-      <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:grid;grid-template-columns:1fr auto;gap:12px;cursor:pointer" onclick="document.getElementById('metrics-session-input').value='${s.session_id}';goTo('telemetry',document.querySelectorAll('.nav-tab')[2])">
-        <div>
-          <div style="font-size:13px;font-weight:600;color:var(--fg);margin-bottom:3px">${s.session_id.slice(0,16)}…</div>
-          <div style="font-family:var(--mono);font-size:10px;color:var(--fg3)">${s.active_bots} bots · ${fmtTPS(s.tps)} TPS · p99: ${fmtNS(s.p99_ns)}</div>
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
-          <span class="badge ${sBadge(s.status)}">${s.status.toUpperCase()}</span>
-          <span style="font-family:var(--mono);font-size:10px;color:var(--fg3)">${fmtDate(s.created_at)}</span>
-        </div>
-      </div>`).join('');
-  } catch(e) {
-    document.getElementById('sessions-list').innerHTML = `<div class="empty-state" style="padding:40px"><div class="empty-text">Backend offline</div></div>`;
-  }
-}
-
-// POST /api/sessions/start (bot-orchestrator)
-async function startSession() {
-  const subID = document.getElementById('sess-sub-id').value.trim();
-  const url = document.getElementById('sess-url').value.trim();
-  const bots = parseInt(document.getElementById('sess-bots').value) || 2048;
-  const dur  = parseInt(document.getElementById('sess-dur').value) || 300;
-  const res  = document.getElementById('sess-result');
-
-  if (!url) { toast('Enter a target URL', 'error'); return; }
-  res.textContent = 'Starting…';
-
-  try {
-    const r = await fetch(`${API_BASE}/api/sessions/start`, {
-      method: 'POST',
-      headers: {
-        'Content-Type':'application/json',
-        ...(state.token ? {'Authorization':`Bearer ${state.token}`} : {})
-      },
-      body: JSON.stringify({submission_id:subID,target_url:url,bot_count:bots,duration_secs:dur,endpoint_type:'WebSocket'})
-    });
-    const data = await r.json();
-    if (r.ok) {
-      res.innerHTML = `<span style="color:var(--green)">✓ Session ${data.session_id}</span>`;
-      toast('Benchmark started!', 'success');
-      loadSessions();
-    } else {
-      res.innerHTML = `<span style="color:var(--red)">${data.error}</span>`;
-    }
-  } catch(e) {
-    res.innerHTML = `<span style="color:var(--amber)">Backend offline (demo mode)</span>`;
-    toast('Backend offline', 'info');
-  }
-}
-
-// GET /v1/metrics/:session_id (scoring-service)
-async function loadSessionMetrics() {
-  const id = document.getElementById('metrics-session-input').value.trim();
-  if (!id) return;
-  const el = document.getElementById('session-metrics-out');
-  el.textContent = 'Fetching…';
-  try {
-    const r = await fetch(`${API_BASE}/v1/metrics/${id}`, {
-      headers: state.token ? {'Authorization':`Bearer ${state.token}`} : {}
-    });
-    if (!r.ok) { el.textContent = 'Not found'; return; }
-    const data = await r.json();
-    el.innerHTML = Object.entries(data).map(([k,v]) =>
-      `<span style="color:var(--fg3)">${k}:</span> <span style="color:var(--accent)">${v}</span>`
-    ).join('<br>');
-  } catch(e) {
-    el.textContent = 'Backend offline';
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// UTILITIES
-// ═══════════════════════════════════════════════════════════════════════════
-function fmtNS(ns) {
-  if (!ns) return '—';
-  const us = ns / 1000;
-  if (us < 1000) return us.toFixed(1) + 'μs';
-  return (us/1000).toFixed(2) + 'ms';
-}
-function fmtTPS(tps) {
-  if (!tps) return '—';
-  if (tps >= 1_000_000) return (tps/1_000_000).toFixed(2) + 'M';
-  if (tps >= 1_000) return (tps/1_000).toFixed(1) + 'K';
-  return Math.round(tps).toString();
-}
-function fmtNum(n) {
-  if (n >= 1e9) return (n/1e9).toFixed(1)+'B';
-  if (n >= 1e6) return (n/1e6).toFixed(1)+'M';
-  if (n >= 1e3) return (n/1e3).toFixed(1)+'K';
-  return n.toString();
-}
-function fmtDate(iso) {
-  if (!iso) return '—';
-  try { return new Date(iso).toLocaleTimeString(); } catch { return iso; }
-}
-function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function toast(msg, type = 'info') {
-  const el = document.createElement('div');
-  el.className = `toast toast-${type}`;
-  el.innerHTML = `<span>${type==='success'?'✓':type==='error'?'✗':'ℹ'}</span><span>${esc(msg)}</span>`;
-  document.getElementById('toasts').appendChild(el);
-  setTimeout(() => el.remove(), 4000);
-}
-
-// Redraw sparkline on resize
-window.addEventListener('resize', () => { if (sparkChart) sparkChart.draw(); });
-</script>
+            <ul class="pipeline-list">
+                <li class="pipeline-item">
+                    <div class="step-icon" style="color: var(--text-muted);">[ ]</div>
+                    <div class="step-info">
+                        <h4>Upload</h4>
+                        <p>Receiving archive to MinIO</p>
+                    </div>
+                </li>
+                <li class="pipeline-item">
+                    <div class="step-icon" style="color: var(--text-muted);">[ ]</div>
+                    <div class="step-info">
+                        <h4>Security Scan</h4>
+                        <p>ClamAV + reverse shell detection</p>
+                    </div>
+                </li>
+                <li class="pipeline-item">
+                    <div class="step-icon" style="color: var(--text-muted);">[ ]</div>
+                    <div class="step-info">
+                        <h4>Build</h4>
+                        <p>Docker multi-stage build</p>
+                    </div>
+                </li>
+                <li class="pipeline-item">
+                    <div class="step-icon" style="color: var(--text-muted);">[ ]</div>
+                    <div class="step-info">
+                        <h4>Deploy Sandbox</h4>
+                        <p>gVisor - 2vCPU - 4GB - no egress</p>
+                    </div>
+                </li>
+            </ul>
+        </section>
+
+        <section class="panel">
+            <div class="panel-header">Sandbox Specs</div>
+            <ul class="pipeline-list">
+                <li class="pipeline-item">
+                    <div class="step-icon" style="color: var(--accent-amber);">🔒</div>
+                    <div class="step-info">
+                        <p><strong style="color:var(--text-main)">gVisor runsc</strong> - kernel boundary isolation</p>
+                    </div>
+                </li>
+                <li class="pipeline-item">
+                    <div class="step-icon" style="color: var(--accent-cyan);">🛡️</div>
+                    <div class="step-info">
+                        <p><strong style="color:var(--text-main)">seccomp-bpf</strong> - syscall allowlist only</p>
+                    </div>
+                </li>
+                <li class="pipeline-item">
+                    <div class="step-icon" style="color: var(--accent-red);">⚡</div>
+                    <div class="step-info">
+                        <p><strong style="color:var(--text-main)">2 vCPU pinned</strong> - zero steal time</p>
+                    </div>
+                </li>
+            </ul>
+        </section>
+
+    </main>
+
+    <script>
+        function logout() {
+            localStorage.removeItem('token');
+            alert("Signed out successfully. Token cleared.");
+            window.location.reload();
+        }
+
+        function updateFileInfo() {
+            const fileInput = document.getElementById('file-upload');
+            const fileNameDisplay = document.getElementById('display-file-name');
+            const fileSizeDisplay = document.getElementById('display-file-size');
+
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                fileNameDisplay.textContent = file.name.toUpperCase();
+                const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+                fileSizeDisplay.textContent = `${sizeMB} MB • ready for furnace`;
+                fileSizeDisplay.style.color = 'var(--accent-cyan)';
+            }
+        }
+
+        async function submitCode() {
+            const btn = document.getElementById('deploy-btn');
+            const errorBox = document.getElementById('error-box');
+            const pipelineStatus = document.getElementById('pipeline-status');
+            const fileInput = document.getElementById('file-upload');
+            const language = document.getElementById('language-select').value;
+            const endpoint = document.getElementById('endpoint-select').value;
+
+            if (fileInput.files.length === 0) {
+                showError("SYSTEM HALT: No binary or source zip selected.");
+                return;
+            }
+
+            errorBox.style.display = 'none';
+            btn.textContent = 'TRANSMITTING PAYLOAD...';
+            btn.style.backgroundColor = 'var(--accent-amber)';
+            btn.disabled = true;
+            pipelineStatus.textContent = 'TRANSMITTING';
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('language', language);
+            formData.append('endpoint_type', endpoint);
+
+            // Fetch JWT token. If missing, backend will reject it gracefully.
+            const token = localStorage.getItem('token') || ""; 
+
+            try {
+                const response = await fetch('/v1/submissions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || `HTTP ${response.status}: Gateway rejected payload.`);
+                }
+
+                // Success State
+                btn.textContent = 'DEPLOYMENT SUCCESSFUL';
+                btn.style.backgroundColor = 'var(--accent-green)';
+                pipelineStatus.textContent = 'BUILD QUEUED';
+                console.log("Success! Submission ID:", data.submission_id);
+                
+                setTimeout(() => {
+                    btn.textContent = 'DEPLOY TO FURNACE';
+                    btn.style.backgroundColor = 'var(--accent-brand)';
+                    btn.disabled = false;
+                    pipelineStatus.textContent = 'IDLE';
+                }, 3000);
+
+            } catch (err) {
+                showError(`db error: ERROR: ${err.message}`);
+                btn.textContent = 'RETRY DEPLOYMENT';
+                btn.style.backgroundColor = 'var(--accent-brand)';
+                btn.disabled = false;
+                pipelineStatus.textContent = 'FAILED';
+            }
+        }
+
+        function showError(msg) {
+            const errorBox = document.getElementById('error-box');
+            errorBox.textContent = msg;
+            errorBox.style.display = 'block';
+        }
+    </script>
 </body>
 </html>
