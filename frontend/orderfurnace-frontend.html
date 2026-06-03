@@ -607,7 +607,14 @@
                     body: formData
                 });
 
-                const data = await response.json();
+                // Safely read response as text first to handle both raw text errors and JSON objects
+                const responseText = await response.text();
+                let data = {};
+                try {
+                    data = JSON.parse(responseText);
+                } catch (e) {
+                    throw new Error(`Server returned raw response: "${responseText}" (HTTP ${response.status})`);
+                }
 
                 if (!response.ok) {
                     throw new Error(data.error || `HTTP ${response.status}: Gateway rejected payload.`);
