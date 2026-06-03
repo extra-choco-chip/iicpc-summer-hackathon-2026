@@ -88,6 +88,15 @@ func (db *DB) CreateSubmission(ctx context.Context, s *SubmissionRecord) error {
 	if db.pool == nil {
 		return nil
 	}
+	
+	// 1. Upsert the team to ensure Postgres knows about them before attaching a submission
+	_, _ = db.pool.Exec(ctx, `
+		INSERT INTO teams (team_id, team_name) 
+		VALUES ($1, $2) 
+		ON CONFLICT (team_id) DO NOTHING`, 
+		s.TeamID, s.TeamName)
+
+	// 2. Insert the actual submission
 	_, err := db.pool.Exec(ctx, `
 		INSERT INTO submissions
 		  (submission_id, team_id, team_name, language, endpoint_type, filename, object_key, status)
