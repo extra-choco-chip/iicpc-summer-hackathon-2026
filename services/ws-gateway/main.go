@@ -47,8 +47,11 @@ func (h *Hub) Register(c *Client) {
 
 func (h *Hub) Unregister(id string) {
 	h.mu.Lock()
-	delete(h.clients, id)
-	h.mu.Unlock()
+	defer h.mu.Unlock()
+	if c, ok := h.clients[id]; ok {
+		delete(h.clients, id)
+		close(c.send) // Safely close while locked
+	}
 	log.Printf("client disconnected: %s (total: %d)", id[:8], len(h.clients))
 }
 
@@ -134,7 +137,8 @@ func streamHandler(hub *Hub) http.HandlerFunc {
 
 		// Read pump — keeps connection alive, handles client pings
 		defer func() {
-			close(client.send)
+			hub.Unregister(client.id)
+			conn.Close()
 		}()
 		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		conn.SetPongHandler(func(string) error {
