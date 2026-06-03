@@ -90,10 +90,27 @@
             box-shadow: 0 0 8px var(--accent-red);
         }
 
+        /* Tab Navigation Logic */
+        .tab-content {
+            display: none;
+            height: 100%;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        .tab-content.active-view {
+            display: flex;
+        }
+        #view-submit.active-view {
+            display: grid; /* Maintain the bento box grid for the submit view */
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         /* Bento Box Grid Layout */
         .grid-container {
             display: grid;
-            grid-template-columns: 2fr 1fr;
+            grid-template-columns: 2fr 1.5fr;
             grid-template-rows: auto 1fr;
             gap: 24px;
             height: 100%;
@@ -106,6 +123,7 @@
             padding: 20px;
             display: flex;
             flex-direction: column;
+            overflow-y: auto;
         }
 
         .panel-header {
@@ -214,6 +232,7 @@
         .step-icon {
             font-family: 'JetBrains Mono', monospace;
             font-size: 14px;
+            transition: color 0.3s;
         }
 
         .step-info h4 {
@@ -239,141 +258,277 @@
             margin-top: 16px;
             display: none;
         }
+        
+        /* Leaderboard Table */
+        .lb-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+        }
+        .lb-table th, .lb-table td {
+            padding: 8px 4px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .lb-table th {
+            color: var(--text-muted);
+            font-weight: normal;
+        }
     </style>
 </head>
 <body>
 
     <header>
-        <div class="logo">⚡ OrderFurnace</div>
+        <div class="logo">OrderFurnace</div>
         <div class="nav-links">
-            <span>Leaderboard</span>
-            <span class="active">Submit</span>
-            <span>Telemetry</span>
-            <span>Sessions</span>
+            <span id="nav-leaderboard" onclick="switchTab('leaderboard')">Leaderboard</span>
+            <span id="nav-submit" class="active" onclick="switchTab('submit')">Submit</span>
+            <span id="nav-telemetry" onclick="switchTab('telemetry')">Telemetry</span>
+            <span id="nav-sessions" onclick="switchTab('sessions')">Sessions</span>
         </div>
-        <div class="user-status">
+        <div class="user-status" id="user-status-container">
             <span class="status-dot"></span> DISCONNECTED
-            <span style="color: var(--accent-brand); margin-left: 16px;">👤 [TerminalSquad]</span>
-            <button onclick="logout()" style="padding: 6px 12px; background: transparent; cursor:pointer; border: 1px solid var(--border-color);">Sign Out</button>
+            <span style="color: var(--accent-brand); margin-left: 16px;">👤 [Authenticating...]</span>
         </div>
     </header>
 
-    <main class="grid-container">
+    <main style="height: 100%; overflow: hidden;">
         
-        <section class="panel" style="grid-row: span 2;">
-            <div class="panel-header">
-                <span>Upload Source / Binary</span>
-                <span style="color: var(--accent-amber);">Sandbox Ready</span>
-            </div>
-            
-            <div class="upload-zone" onclick="document.getElementById('file-upload').click()">
-                <div style="color: var(--accent-green); font-size: 24px;">☑</div>
-                <div class="file-name" id="display-file-name">SELECT ZIP FILE</div>
-                <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--text-muted);" id="display-file-size">0.00 MB • ready to upload</div>
+        <div id="view-submit" class="tab-content active-view grid-container">
+            <section class="panel" style="grid-row: span 2;">
+                <div class="panel-header">
+                    <span>Upload Source / Binary</span>
+                    <span style="color: var(--accent-amber);" id="live-tps-indicator">Sandbox Ready</span>
+                </div>
                 
-                <input type="file" id="file-upload" accept=".zip,.tar.gz" style="display: none;" onchange="updateFileInfo()">
-                
-                <div class="lang-badges">
-                    <span class="badge rust">Rust</span>
-                    <span class="badge cpp">C++</span>
-                    <span class="badge go">Go</span>
+                <div class="upload-zone" onclick="document.getElementById('file-upload').click()">
+                    <div style="color: var(--accent-green); font-size: 24px;">☑</div>
+                    <div class="file-name" id="display-file-name">SELECT ZIP FILE</div>
+                    <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--text-muted);" id="display-file-size">0.00 MB • ready to upload</div>
+                    
+                    <input type="file" id="file-upload" accept=".zip,.tar.gz" style="display: none;" onchange="updateFileInfo()">
+                    
+                    <div class="lang-badges">
+                        <span class="badge rust">Rust</span>
+                        <span class="badge cpp">C++</span>
+                        <span class="badge go">Go</span>
+                    </div>
                 </div>
-            </div>
 
-            <div class="controls-row">
-                <div style="flex: 1;">
-                    <div class="panel-header" style="margin-bottom: 8px;">Language</div>
-                    <select id="language-select" style="width: 100%;">
-                        <option value="go">Go</option>
-                        <option value="cpp">C++</option>
-                        <option value="rust">Rust</option>
-                    </select>
+                <div class="controls-row">
+                    <div style="flex: 1;">
+                        <div class="panel-header" style="margin-bottom: 8px;">Language</div>
+                        <select id="language-select" style="width: 100%;">
+                            <option value="go">Go</option>
+                            <option value="cpp">C++</option>
+                            <option value="rust">Rust</option>
+                        </select>
+                    </div>
+                    <div style="flex: 1;">
+                        <div class="panel-header" style="margin-bottom: 8px;">Endpoint Type</div>
+                        <select id="endpoint-select" style="width: 100%;">
+                            <option value="WebSocket">WS (WebSocket)</option>
+                            <option value="REST">REST API</option>
+                            <option value="FIX">FIX 4.4</option>
+                        </select>
+                    </div>
                 </div>
-                <div style="flex: 1;">
-                    <div class="panel-header" style="margin-bottom: 8px;">Endpoint Type</div>
-                    <select id="endpoint-select" style="width: 100%;">
-                        <option value="WebSocket">WS (WebSocket)</option>
-                        <option value="REST">REST API</option>
-                        <option value="FIX">FIX 4.4</option>
-                    </select>
+
+                <div class="error-banner" id="error-box"></div>
+
+                <button class="btn-primary" id="deploy-btn" onclick="submitCode()">DEPLOY TO FURNACE</button>
+            </section>
+
+            <section class="panel">
+                <div class="panel-header">
+                    <span>Build Pipeline</span>
+                    <span style="color: var(--accent-cyan);" id="pipeline-status">IDLE</span>
                 </div>
+                <ul class="pipeline-list">
+                    <li class="pipeline-item">
+                        <div class="step-icon" id="step-upload" style="color: var(--text-muted);">[ ]</div>
+                        <div class="step-info">
+                            <h4 id="text-upload">Upload & Scan</h4>
+                            <p>Receiving archive to MinIO & security check</p>
+                        </div>
+                    </li>
+                    <li class="pipeline-item">
+                        <div class="step-icon" id="step-build" style="color: var(--text-muted);">[ ]</div>
+                        <div class="step-info">
+                            <h4 id="text-build">Build</h4>
+                            <p>Docker multi-stage compilation</p>
+                        </div>
+                    </li>
+                    <li class="pipeline-item">
+                        <div class="step-icon" id="step-deploy" style="color: var(--text-muted);">[ ]</div>
+                        <div class="step-info">
+                            <h4 id="text-deploy">Deploy Sandbox</h4>
+                            <p>gVisor isolated container boot</p>
+                        </div>
+                    </li>
+                </ul>
+            </section>
+        </div>
+
+        <div id="view-leaderboard" class="tab-content panel" style="flex-direction: column;">
+            <div class="panel-header" style="font-size: 16px;">Live Global Leaderboard</div>
+            <div id="leaderboard-container">
+                <table class="lb-table">
+                    <tr style="color: var(--text-muted); border-bottom: 1px solid var(--border-color);">
+                        <th>RANK</th><th>TEAM</th><th>LANG</th><th>SCORE</th><th>TPS</th><th>p99 LAT</th>
+                    </tr>
+                    <tr>
+                        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">Waiting for telemetry stream...</td>
+                    </tr>
+                </table>
             </div>
+        </div>
 
-            <div class="error-banner" id="error-box"></div>
-
-            <button class="btn-primary" id="deploy-btn" onclick="submitCode()">DEPLOY TO FURNACE</button>
-        </section>
-
-        <section class="panel">
-            <div class="panel-header">
-                <span>Build Pipeline</span>
-                <span style="color: var(--accent-cyan);" id="pipeline-status">IDLE</span>
+        <div id="view-telemetry" class="tab-content panel" style="align-items: center; justify-content: center;">
+            <div style="text-align: center; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">
+                <div style="font-size: 48px; margin-bottom: 16px; color: var(--accent-cyan);">⚡</div>
+                <h2>Live Telemetry View</h2>
+                <p style="margin-top: 8px;">Detailed bot metrics and real-time graphs will render here.</p>
             </div>
-            <ul class="pipeline-list">
-                <li class="pipeline-item">
-                    <div class="step-icon" style="color: var(--text-muted);">[ ]</div>
-                    <div class="step-info">
-                        <h4>Upload</h4>
-                        <p>Receiving archive to MinIO</p>
-                    </div>
-                </li>
-                <li class="pipeline-item">
-                    <div class="step-icon" style="color: var(--text-muted);">[ ]</div>
-                    <div class="step-info">
-                        <h4>Security Scan</h4>
-                        <p>ClamAV + reverse shell detection</p>
-                    </div>
-                </li>
-                <li class="pipeline-item">
-                    <div class="step-icon" style="color: var(--text-muted);">[ ]</div>
-                    <div class="step-info">
-                        <h4>Build</h4>
-                        <p>Docker multi-stage build</p>
-                    </div>
-                </li>
-                <li class="pipeline-item">
-                    <div class="step-icon" style="color: var(--text-muted);">[ ]</div>
-                    <div class="step-info">
-                        <h4>Deploy Sandbox</h4>
-                        <p>gVisor - 2vCPU - 4GB - no egress</p>
-                    </div>
-                </li>
-            </ul>
-        </section>
+        </div>
 
-        <section class="panel">
-            <div class="panel-header">Sandbox Specs</div>
-            <ul class="pipeline-list">
-                <li class="pipeline-item">
-                    <div class="step-icon" style="color: var(--accent-amber);">🔒</div>
-                    <div class="step-info">
-                        <p><strong style="color:var(--text-main)">gVisor runsc</strong> - kernel boundary isolation</p>
-                    </div>
-                </li>
-                <li class="pipeline-item">
-                    <div class="step-icon" style="color: var(--accent-cyan);">🛡️</div>
-                    <div class="step-info">
-                        <p><strong style="color:var(--text-main)">seccomp-bpf</strong> - syscall allowlist only</p>
-                    </div>
-                </li>
-                <li class="pipeline-item">
-                    <div class="step-icon" style="color: var(--accent-red);">⚡</div>
-                    <div class="step-info">
-                        <p><strong style="color:var(--text-main)">2 vCPU pinned</strong> - zero steal time</p>
-                    </div>
-                </li>
-            </ul>
-        </section>
+        <div id="view-sessions" class="tab-content panel" style="align-items: center; justify-content: center;">
+            <div style="text-align: center; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">
+                <div style="font-size: 48px; margin-bottom: 16px; color: var(--accent-amber);">📦</div>
+                <h2>Historical Sessions</h2>
+                <p style="margin-top: 8px;">Your past deployments and sandbox logs will appear here.</p>
+            </div>
+        </div>
 
     </main>
 
     <script>
+        let ws;
+        const GATEWAY_URL = window.location.protocol === 'https:' ? `wss://${window.location.host}/v1/stream` : `ws://${window.location.host || 'localhost:8000'}/v1/stream`;
+
+        // 1. Auto-authenticate a guest session on load if no token exists
+        document.addEventListener("DOMContentLoaded", async () => {
+            if (!localStorage.getItem('token')) {
+                const teamName = "Guest_" + Math.random().toString(36).substring(2, 8);
+                try {
+                    const res = await fetch('/v1/auth/register', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ team_name: teamName, password: "demo" })
+                    });
+                    const data = await res.json();
+                    if (data.token) {
+                        localStorage.setItem('token', data.token);
+                        localStorage.setItem('team_name', teamName);
+                        updateUserStatusUI(teamName);
+                    }
+                } catch (e) {
+                    console.error("Auto-auth failed:", e);
+                }
+            } else {
+                updateUserStatusUI(localStorage.getItem('team_name') || "User");
+            }
+
+            // Initialize real-time dashboard telemetry
+            connectWebSocket();
+        });
+
+        function updateUserStatusUI(teamName) {
+            const userStatus = document.getElementById('user-status-container');
+            userStatus.innerHTML = `
+                <span class="status-dot" style="background-color: var(--accent-amber); box-shadow: 0 0 8px var(--accent-amber);"></span> CONNECTING...
+                <span style="color: var(--accent-brand); margin-left: 16px;">👤 [${teamName}]</span>
+                <button onclick="logout()" style="padding: 6px 12px; background: transparent; cursor:pointer; border: 1px solid var(--border-color); color: var(--text-main); border-radius: 4px; margin-left: 12px;">Sign Out</button>
+            `;
+        }
+
         function logout() {
             localStorage.removeItem('token');
-            alert("Signed out successfully. Token cleared.");
+            localStorage.removeItem('team_name');
+            localStorage.removeItem('active_session_id');
             window.location.reload();
         }
 
+        // 2. Real-Time Telemetry & Leaderboard WebSockets
+        function connectWebSocket() {
+            ws = new WebSocket(GATEWAY_URL);
+
+            ws.onopen = () => {
+                const dot = document.querySelector('.status-dot');
+                if (dot) {
+                    dot.style.backgroundColor = 'var(--accent-green)';
+                    dot.style.boxShadow = '0 0 8px var(--accent-green)';
+                }
+                document.getElementById('user-status-container').innerHTML = document.getElementById('user-status-container').innerHTML.replace('CONNECTING...', 'LIVE UPLINK');
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    // Route 1: Leaderboard Update (Broadcast every 5s)
+                    if (data.entries && Array.isArray(data.entries)) {
+                        renderLeaderboard(data.entries);
+                    } 
+                    
+                    // Route 2: Live Telemetry Update (Broadcast every 500ms)
+                    else if (data.session_id && data.tps !== undefined) {
+                        updateLiveTelemetry(data);
+                    }
+                } catch (err) {
+                    // ignore parse errors for non-json pings
+                }
+            };
+
+            ws.onclose = () => {
+                const dot = document.querySelector('.status-dot');
+                if (dot) {
+                    dot.style.backgroundColor = 'var(--accent-red)';
+                    dot.style.boxShadow = '0 0 8px var(--accent-red)';
+                }
+                setTimeout(connectWebSocket, 3000);
+            };
+        }
+
+        function renderLeaderboard(entries) {
+            let lbContainer = document.getElementById('leaderboard-container');
+            if (!lbContainer) return; 
+
+            let html = `<div class="panel-header">Live Global Leaderboard</div>
+                        <table class="lb-table">
+                        <tr>
+                            <th>RANK</th><th>TEAM</th><th>LANG</th><th>SCORE</th><th>TPS</th><th>p99 LAT</th>
+                        </tr>`;
+                        
+            entries.slice(0, 10).forEach((entry, index) => {
+                const p99_us = (entry.p99_ns / 1000).toFixed(0);
+                const tps = (entry.tps / 1000).toFixed(1) + 'k';
+                const isMe = entry.team_name === localStorage.getItem('team_name');
+                
+                html += `<tr style="${isMe ? 'background-color: rgba(217, 249, 157, 0.1);' : ''}">
+                    <td style="color: var(--accent-brand)">#${index + 1}</td>
+                    <td style="font-weight: bold; ${isMe ? 'color: var(--accent-brand)' : ''}">${entry.team_name}</td>
+                    <td style="color: var(--text-muted)">${entry.language}</td>
+                    <td style="color: var(--accent-green)">${entry.composite_score.toFixed(2)}</td>
+                    <td>${tps}</td>
+                    <td style="color: var(--accent-amber)">${p99_us}µs</td>
+                </tr>`;
+            });
+            html += `</table>`;
+            lbContainer.innerHTML = html;
+        }
+
+        function updateLiveTelemetry(metrics) {
+            const currentSession = localStorage.getItem('active_session_id');
+            if (metrics.session_id === currentSession) {
+                const tpsIndicator = document.getElementById('live-tps-indicator');
+                tpsIndicator.style.color = 'var(--accent-cyan)';
+                tpsIndicator.textContent = `⚡ ${(metrics.tps / 1000).toFixed(2)}k TPS | ${metrics.violations} VIOLATIONS`;
+            }
+        }
+
+        // 3. Deployment & Polling Logic
         function updateFileInfo() {
             const fileInput = document.getElementById('file-upload');
             const fileNameDisplay = document.getElementById('display-file-name');
@@ -385,6 +540,28 @@
                 const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
                 fileSizeDisplay.textContent = `${sizeMB} MB • ready for furnace`;
                 fileSizeDisplay.style.color = 'var(--accent-cyan)';
+            }
+        }
+
+        function setStepStatus(stepId, statusStr) {
+            const icon = document.getElementById(`step-${stepId}`);
+            const text = document.getElementById(`text-${stepId}`);
+            if (statusStr === 'active') {
+                icon.textContent = '[~]';
+                icon.style.color = 'var(--accent-amber)';
+                text.style.color = 'var(--accent-amber)';
+            } else if (statusStr === 'done') {
+                icon.textContent = '[✓]';
+                icon.style.color = 'var(--accent-green)';
+                text.style.color = 'var(--text-main)';
+            } else if (statusStr === 'error') {
+                icon.textContent = '[X]';
+                icon.style.color = 'var(--accent-red)';
+                text.style.color = 'var(--accent-red)';
+            } else {
+                icon.textContent = '[ ]';
+                icon.style.color = 'var(--text-muted)';
+                text.style.color = 'var(--text-main)';
             }
         }
 
@@ -406,13 +583,19 @@
             btn.style.backgroundColor = 'var(--accent-amber)';
             btn.disabled = true;
             pipelineStatus.textContent = 'TRANSMITTING';
+            document.getElementById('live-tps-indicator').textContent = 'INITIALIZING';
+            document.getElementById('live-tps-indicator').style.color = 'var(--accent-amber)';
+
+            // Reset Pipeline UI
+            setStepStatus('upload', 'active');
+            setStepStatus('build', 'idle');
+            setStepStatus('deploy', 'idle');
 
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
             formData.append('language', language);
             formData.append('endpoint_type', endpoint);
 
-            // Fetch JWT token. If missing, backend will reject it gracefully.
             const token = localStorage.getItem('token') || ""; 
 
             try {
@@ -430,32 +613,100 @@
                     throw new Error(data.error || `HTTP ${response.status}: Gateway rejected payload.`);
                 }
 
-                // Success State
-                btn.textContent = 'DEPLOYMENT SUCCESSFUL';
-                btn.style.backgroundColor = 'var(--accent-green)';
-                pipelineStatus.textContent = 'BUILD QUEUED';
-                console.log("Success! Submission ID:", data.submission_id);
-                
-                setTimeout(() => {
-                    btn.textContent = 'DEPLOY TO FURNACE';
-                    btn.style.backgroundColor = 'var(--accent-brand)';
-                    btn.disabled = false;
-                    pipelineStatus.textContent = 'IDLE';
-                }, 3000);
+                btn.textContent = 'BUILDING CONTAINER...';
+                pipelineStatus.textContent = 'QUEUED';
+                setStepStatus('upload', 'done');
+                setStepStatus('build', 'active');
+
+                // Start Polling the Submission Status
+                pollSubmissionStatus(data.submission_id, token, btn, pipelineStatus);
 
             } catch (err) {
-                showError(`db error: ERROR: ${err.message}`);
+                showError(`DB ERROR: ${err.message}`);
                 btn.textContent = 'RETRY DEPLOYMENT';
                 btn.style.backgroundColor = 'var(--accent-brand)';
                 btn.disabled = false;
                 pipelineStatus.textContent = 'FAILED';
+                setStepStatus('upload', 'error');
             }
+        }
+
+        function pollSubmissionStatus(submissionId, token, btn, pipelineStatus) {
+            const pollInterval = setInterval(async () => {
+                try {
+                    const res = await fetch(`/v1/submissions/${submissionId}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    
+                    if (!res.ok) return; // Keep trying if gateway blips
+                    
+                    const sub = await res.json();
+                    pipelineStatus.textContent = sub.status.toUpperCase();
+                    
+                    if (sub.status === 'building') {
+                        setStepStatus('build', 'active');
+                    } else if (sub.status === 'deploying') {
+                        setStepStatus('build', 'done');
+                        setStepStatus('deploy', 'active');
+                        btn.textContent = 'DEPLOYING SANDBOX...';
+                    } else if (sub.status === 'running') {
+                        clearInterval(pollInterval);
+                        setStepStatus('deploy', 'done');
+                        btn.textContent = 'FLEET ENGAGED';
+                        btn.style.backgroundColor = 'var(--accent-green)';
+                        
+                        // Save session ID so live telemetry can track it
+                        if (sub.session_id) {
+                            localStorage.setItem('active_session_id', sub.session_id);
+                        }
+
+                        // Allow new submissions after a delay
+                        setTimeout(() => {
+                            btn.textContent = 'DEPLOY NEW PAYLOAD';
+                            btn.style.backgroundColor = 'var(--accent-brand)';
+                            btn.disabled = false;
+                            pipelineStatus.textContent = 'IDLE';
+                        }, 5000);
+                        
+                    } else if (sub.status.includes('failed')) {
+                        clearInterval(pollInterval);
+                        showError("SYSTEM HALT: " + (sub.error_msg || "Unknown error during " + sub.status));
+                        btn.textContent = 'RETRY DEPLOYMENT';
+                        btn.style.backgroundColor = 'var(--accent-brand)';
+                        btn.disabled = false;
+                        
+                        if (sub.status === 'build_failed') setStepStatus('build', 'error');
+                        if (sub.status === 'deploy_failed') setStepStatus('deploy', 'error');
+                    }
+                } catch (e) {
+                    console.error("Poll error:", e);
+                }
+            }, 2000);
         }
 
         function showError(msg) {
             const errorBox = document.getElementById('error-box');
             errorBox.textContent = msg;
             errorBox.style.display = 'block';
+        }
+
+        // Tab Switching Logic
+        function switchTab(tabId) {
+            // 1. Remove active class from all nav links
+            document.querySelectorAll('.nav-links span').forEach(link => {
+                link.classList.remove('active');
+            });
+            
+            // 2. Add active class to the clicked link
+            document.getElementById(`nav-${tabId}`).classList.add('active');
+
+            // 3. Hide all views
+            document.querySelectorAll('.tab-content').forEach(view => {
+                view.classList.remove('active-view');
+            });
+
+            // 4. Show target view
+            document.getElementById(`view-${tabId}`).classList.add('active-view');
         }
     </script>
 </body>
