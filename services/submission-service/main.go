@@ -468,7 +468,9 @@ func (h *Handler) SubmitCode(c *gin.Context) {
 	defer file.Close()
 
 	submissionID := uuid.New().String()
-	objectKey := fmt.Sprintf("%s/%s", submissionID, header.Filename)
+	// Strip out any malicious directory paths from the uploaded filename
+	cleanFilename := filepath.Base(header.Filename)
+	objectKey := fmt.Sprintf("%s/%s", submissionID, cleanFilename)
 
 	// Save to temp file for scanning
 	tmpFile, err := os.CreateTemp("", "upload-*")
