@@ -124,22 +124,30 @@ func (ob *OrderBook) RemoveOrder(orderID string) {
 	// Prune from levels (lazy - we don't need perfect book state for validation)
 }
 
-// BestBid returns the best bid price.
+// BestBid returns the best valid bid price.
 func (ob *OrderBook) BestBid() float64 {
 	ob.mu.RLock()
 	defer ob.mu.RUnlock()
-	if len(ob.bids) > 0 {
-		return ob.bids[0].Price
+	for _, lvl := range ob.bids {
+		for _, lo := range lvl.Orders {
+			if _, exists := ob.orderIndex[lo.OrderID]; exists {
+				return lvl.Price // First valid order defines the true top of book
+			}
+		}
 	}
 	return 0
 }
 
-// BestAsk returns the best ask price.
+// BestAsk returns the best valid ask price.
 func (ob *OrderBook) BestAsk() float64 {
 	ob.mu.RLock()
 	defer ob.mu.RUnlock()
-	if len(ob.asks) > 0 {
-		return ob.asks[0].Price
+	for _, lvl := range ob.asks {
+		for _, lo := range lvl.Orders {
+			if _, exists := ob.orderIndex[lo.OrderID]; exists {
+				return lvl.Price // First valid order defines the true top of book
+			}
+		}
 	}
 	return math.MaxFloat64
 }
