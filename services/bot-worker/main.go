@@ -417,8 +417,6 @@ func (b *Bot) thinkTime() time.Duration {
 
 type TelemetryProducer struct {
 	writer  *kafka.Writer
-	buffer  chan TelemetryEvent
-	dropped int64
 }
 
 func NewTelemetryProducer(brokers []string, topic string) *TelemetryProducer {
@@ -433,54 +431,18 @@ func NewTelemetryProducer(brokers []string, topic string) *TelemetryProducer {
 			log.Printf("kafka error: "+s, a...)
 		}),
 	}
-	p := &TelemetryProducer{
+	return &TelemetryProducer{
 		writer: w,
-		buffer: make(chan TelemetryEvent, 100_000),
 	}
-	go p.flushLoop()
-	return p
 }
 
 func (p *TelemetryProducer) Emit(e TelemetryEvent) {
-	select {
-	case p.buffer <- e:
-	default:
-		atomic.AddInt64(&p.dropped, 1)
-	}
-}
-
-func (p *TelemetryProducer) flushLoop() {
-	batch := make([]kafka.Message, 0, 500)
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-
-	flush := func() {
-		if len(batch) == 0 {
-			return
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := p.writer.WriteMessages(ctx, batch...); err != nil {
-			log.Printf("kafka write error: %v", err)
-		}
-		batch = batch[:0]
-	}
-
-	for {
-		select {
-		case e := <-p.buffer:
-			data, _ := json.Marshal(e)
-			batch = append(batch, kafka.Message{
-				Key:   []byte(e.SessionID),
-				Value: data,
-			})
-			if len(batch) >= 500 {
-				flush()
-			}
-		case <-ticker.C:
-			flush()
-		}
-	}
+	data, _ := json.Marshal(e)
+	// Because Async is true, this returns immediately and does not block.
+	_ = p.writer.WriteMessages(context.Background(), kafka.Message{
+		Key:   []byte(e.SessionID),
+		Value: data,
+	})
 }
 
 func (p *TelemetryProducer) Close() error {
