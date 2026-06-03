@@ -66,12 +66,18 @@ func computeScore(tps float64, p99NS int64, fillAccPct float64, stable bool) (co
 }
 
 type ScoringEngine struct {
-	rdb  *redis.Client
-	pool *pgxpool.Pool
+	rdb        *redis.Client
+	pool       *pgxpool.Pool
+	lastUpdate map[string]int64
+	mu         sync.Mutex
 }
 
 func NewScoringEngine(rdb *redis.Client, pool *pgxpool.Pool) *ScoringEngine {
-	return &ScoringEngine{rdb: rdb, pool: pool}
+	return &ScoringEngine{
+		rdb:        rdb,
+		pool:       pool,
+		lastUpdate: make(map[string]int64),
+	}
 }
 
 func (se *ScoringEngine) RunOnce(ctx context.Context) {
@@ -93,13 +99,22 @@ func (se *ScoringEngine) scoreSession(ctx context.Context, sessionID string) {
 	}
 
 	var tps, fillAcc float64
-	var p50, p90, p99, violations int64
+	var p50, p90, p99, violations, updatedAt int64
 	fmt.Sscanf(vals["tps"], "%f", &tps)
 	fmt.Sscanf(vals["fill_acc_pct"], "%f", &fillAcc)
 	fmt.Sscanf(vals["p50_ns"], "%d", &p50)
 	fmt.Sscanf(vals["p90_ns"], "%d", &p90)
 	fmt.Sscanf(vals["p99_ns"], "%d", &p99)
 	fmt.Sscanf(vals["violations"], "%d", &violations)
+	fmt.Sscanf(vals["updated_at"], "%d", &updatedAt)
+
+	se.mu.Lock()
+	if se.lastUpdate[sessionID] == updatedAt {
+		se.mu.Unlock()
+		return // Skip insertion, metrics haven't changed
+	}
+	se.lastUpdate[sessionID] = updatedAt
+	se.mu.Unlock()
 
 	composite, tScore, lScore, cScore, sScore := computeScore(tps, p99, fillAcc, true)
 
