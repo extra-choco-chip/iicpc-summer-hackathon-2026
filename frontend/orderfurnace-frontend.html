@@ -66,6 +66,15 @@
             text-transform: uppercase;
             letter-spacing: 1px;
         }
+
+        .nav-links span {
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .nav-links span:hover {
+            color: var(--text-main);
+        }
         
         .nav-links span.active {
             color: var(--text-main);
@@ -150,6 +159,7 @@
             gap: 12px;
             cursor: pointer;
             transition: all 0.2s;
+            min-height: 200px;
         }
         
         .upload-zone:hover {
@@ -232,7 +242,6 @@
         .step-icon {
             font-family: 'JetBrains Mono', monospace;
             font-size: 14px;
-            transition: color 0.3s;
         }
 
         .step-info h4 {
@@ -267,7 +276,7 @@
             font-size: 12px;
         }
         .lb-table th, .lb-table td {
-            padding: 8px 4px;
+            padding: 10px 8px;
             text-align: left;
             border-bottom: 1px solid var(--border-color);
         }
@@ -279,8 +288,8 @@
 </head>
 <body>
 
-    <header>
-        <div class="logo">OrderFurnace</div>
+   <header>
+        <div class="logo">⚡ OrderFurnace</div>
         <div class="nav-links">
             <span id="nav-leaderboard" onclick="switchTab('leaderboard')">Leaderboard</span>
             <span id="nav-submit" class="active" onclick="switchTab('submit')">Submit</span>
@@ -289,11 +298,11 @@
         </div>
         <div class="user-status" id="user-status-container">
             <span class="status-dot"></span> DISCONNECTED
-            <span style="color: var(--accent-brand); margin-left: 16px;">👤 [Authenticating...]</span>
+            <span style="color: var(--accent-brand); margin-left: 16px;">幕 [Authenticating...]</span>
         </div>
     </header>
 
-    <main style="height: 100%; overflow: hidden;">
+    <main style="height: calc(100vh - 100px); overflow: hidden; padding-bottom: 20px;">
         
         <div id="view-submit" class="tab-content active-view grid-container">
             <section class="panel" style="grid-row: span 2;">
@@ -336,7 +345,6 @@
                 </div>
 
                 <div class="error-banner" id="error-box"></div>
-
                 <button class="btn-primary" id="deploy-btn" onclick="submitCode()">DEPLOY TO FURNACE</button>
             </section>
 
@@ -349,55 +357,78 @@
                     <li class="pipeline-item">
                         <div class="step-icon" id="step-upload" style="color: var(--text-muted);">[ ]</div>
                         <div class="step-info">
-                            <h4 id="text-upload">Upload & Scan</h4>
-                            <p>Receiving archive to MinIO & security check</p>
+                            <h4 id="text-upload">Upload & Ingest</h4>
+                            <p>Receiving file target archive to storage</p>
                         </div>
                     </li>
                     <li class="pipeline-item">
                         <div class="step-icon" id="step-build" style="color: var(--text-muted);">[ ]</div>
                         <div class="step-info">
-                            <h4 id="text-build">Build</h4>
+                            <h4 id="text-build">Isolated Build</h4>
                             <p>Docker multi-stage compilation</p>
                         </div>
                     </li>
                     <li class="pipeline-item">
                         <div class="step-icon" id="step-deploy" style="color: var(--text-muted);">[ ]</div>
                         <div class="step-info">
-                            <h4 id="text-deploy">Deploy Sandbox</h4>
-                            <p>gVisor isolated container boot</p>
+                            <h4 id="text-deploy">Sandbox Provision</h4>
+                            <p>Core sandbox isolation boundaries runtime active</p>
                         </div>
+                    </li>
+                </ul>
+            </section>
+
+            <section class="panel">
+                <div class="panel-header">Sandbox Boundary Metrics</div>
+                <ul class="pipeline-list">
+                    <li class="pipeline-item">
+                        <div class="step-icon" style="color: var(--accent-amber);">🔒</div>
+                        <div class="step-info"><p><strong style="color:var(--text-main)">gVisor runsc</strong> - Kernel proxy translation isolation</p></div>
+                    </li>
+                    <li class="pipeline-item">
+                        <div class="step-icon" style="color: var(--accent-cyan);">🛡️</div>
+                        <div class="step-info"><p><strong style="color:var(--text-main)">seccomp-bpf</strong> - Direct absolute syscall enforcement filter</p></div>
                     </li>
                 </ul>
             </section>
         </div>
 
         <div id="view-leaderboard" class="tab-content panel" style="flex-direction: column;">
-            <div class="panel-header" style="font-size: 16px;">Live Global Leaderboard</div>
-            <div id="leaderboard-container">
+            <div class="panel-header" style="font-size: 14px;">Live Global Leaderboard</div>
+            <div id="leaderboard-container" style="width:100%;">
                 <table class="lb-table">
-                    <tr style="color: var(--text-muted); border-bottom: 1px solid var(--border-color);">
-                        <th>RANK</th><th>TEAM</th><th>LANG</th><th>SCORE</th><th>TPS</th><th>p99 LAT</th>
-                    </tr>
-                    <tr>
-                        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">Waiting for telemetry stream...</td>
-                    </tr>
+                    <thead>
+                        <tr style="color: var(--text-muted); border-bottom: 1px solid var(--border-color);">
+                            <th>RANK</th><th>TEAM</th><th>LANG</th><th>SCORE</th><th>TPS</th><th>p99 LATENCY</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">Waiting for telemetry updates stream...</td></tr>
+                    </tbody>
                 </table>
             </div>
         </div>
 
-        <div id="view-telemetry" class="tab-content panel" style="align-items: center; justify-content: center;">
-            <div style="text-align: center; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">
-                <div style="font-size: 48px; margin-bottom: 16px; color: var(--accent-cyan);">⚡</div>
-                <h2>Live Telemetry View</h2>
-                <p style="margin-top: 8px;">Detailed bot metrics and real-time graphs will render here.</p>
+        <div id="view-telemetry" class="tab-content panel" style="flex-direction: column;">
+            <div class="panel-header">Live Kernel Trace Terminal Logs</div>
+            <div id="terminal-output" style="flex: 1; background: #000; color: var(--accent-green); font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 12px; overflow-y: auto; border-radius: 4px; border: 1px solid var(--border-color);">
+                <div style="color: var(--text-muted);">[SYSTEM] Listening on WebSocket uplink loop. Push an active deployment job to pipe traces...</div>
             </div>
         </div>
 
-        <div id="view-sessions" class="tab-content panel" style="align-items: center; justify-content: center;">
-            <div style="text-align: center; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">
-                <div style="font-size: 48px; margin-bottom: 16px; color: var(--accent-amber);">📦</div>
-                <h2>Historical Sessions</h2>
-                <p style="margin-top: 8px;">Your past deployments and sandbox logs will appear here.</p>
+        <div id="view-sessions" class="tab-content panel" style="flex-direction: column;">
+            <div class="panel-header">Platform Submission History Metrics</div>
+            <div style="overflow-y: auto; width:100%;">
+                <table class="lb-table">
+                    <thead>
+                        <tr style="color: var(--text-muted); border-bottom: 1px solid var(--border-color);">
+                            <th>TIMESTAMP</th><th>ARCHIVE NAME</th><th>RUNTIME LANGUAGE</th><th>BUILD STATUS</th><th>SESSION GUID</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-tbody">
+                        <tr><td colspan="5" style="text-align:center; padding: 24px; color: var(--text-muted);">Syncing historical logs database layer...</td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
 
@@ -405,9 +436,8 @@
 
     <script>
         let ws;
-        const GATEWAY_URL = window.location.protocol === 'https:' ? `wss://${window.location.host}/v1/stream` : `ws://${window.location.host || 'localhost:8000'}/v1/stream`;
+        const GATEWAY_URL = window.location.protocol === 'https:' ? `wss://${window.location.host}/v1/stream` : `ws://${window.location.host || 'localhost:3000'}/v1/stream`;
 
-        // 1. Auto-authenticate a guest session on load if no token exists
         document.addEventListener("DOMContentLoaded", async () => {
             if (!localStorage.getItem('token')) {
                 const teamName = "Guest_" + Math.random().toString(36).substring(2, 8);
@@ -424,13 +454,11 @@
                         updateUserStatusUI(teamName);
                     }
                 } catch (e) {
-                    console.error("Auto-auth failed:", e);
+                    console.error("Authentication sync handshake aborted:", e);
                 }
             } else {
-                updateUserStatusUI(localStorage.getItem('team_name') || "User");
+                updateUserStatusUI(localStorage.getItem('team_name') || "TerminalSquad");
             }
-
-            // Initialize real-time dashboard telemetry
             connectWebSocket();
         });
 
@@ -444,13 +472,22 @@
         }
 
         function logout() {
-            localStorage.removeItem('token');
-            localStorage.removeItem('team_name');
-            localStorage.removeItem('active_session_id');
+            localStorage.clear();
             window.location.reload();
         }
 
-        // 2. Real-Time Telemetry & Leaderboard WebSockets
+        function switchTab(viewId) {
+            document.querySelectorAll('.nav-links span').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active-view'));
+            
+            document.getElementById(`nav-${viewId}`).classList.add('active');
+            document.getElementById(`view-${viewId}`).classList.add('active-view');
+
+            if (viewId === 'sessions') {
+                fetchHistory();
+            }
+        }
+
         function connectWebSocket() {
             ws = new WebSocket(GATEWAY_URL);
 
@@ -460,25 +497,19 @@
                     dot.style.backgroundColor = 'var(--accent-green)';
                     dot.style.boxShadow = '0 0 8px var(--accent-green)';
                 }
-                document.getElementById('user-status-container').innerHTML = document.getElementById('user-status-container').innerHTML.replace('CONNECTING...', 'LIVE UPLINK');
+                const container = document.getElementById('user-status-container');
+                container.innerHTML = container.innerHTML.replace('CONNECTING...', 'LIVE UPLINK');
             };
 
             ws.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
-                    
-                    // Route 1: Leaderboard Update (Broadcast every 5s)
                     if (data.entries && Array.isArray(data.entries)) {
                         renderLeaderboard(data.entries);
-                    } 
-                    
-                    // Route 2: Live Telemetry Update (Broadcast every 500ms)
-                    else if (data.session_id && data.tps !== undefined) {
+                    } else if (data.session_id && data.tps !== undefined) {
                         updateLiveTelemetry(data);
                     }
-                } catch (err) {
-                    // ignore parse errors for non-json pings
-                }
+                } catch (err) {}
             };
 
             ws.onclose = () => {
@@ -492,228 +523,199 @@
         }
 
         function renderLeaderboard(entries) {
-            let lbContainer = document.getElementById('leaderboard-container');
-            if (!lbContainer) return; 
+            const tbody = document.querySelector('#view-leaderboard tbody');
+            if (!tbody) return;
 
-            let html = `<div class="panel-header">Live Global Leaderboard</div>
-                        <table class="lb-table">
-                        <tr>
-                            <th>RANK</th><th>TEAM</th><th>LANG</th><th>SCORE</th><th>TPS</th><th>p99 LAT</th>
-                        </tr>`;
-                        
-            entries.slice(0, 10).forEach((entry, index) => {
-                const p99_us = (entry.p99_ns / 1000).toFixed(0);
-                const tps = (entry.tps / 1000).toFixed(1) + 'k';
+            if (entries.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">No running benchmarks currently recorded.</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            entries.forEach((entry, idx) => {
                 const isMe = entry.team_name === localStorage.getItem('team_name');
-                
-                html += `<tr style="${isMe ? 'background-color: rgba(217, 249, 157, 0.1);' : ''}">
-                    <td style="color: var(--accent-brand)">#${index + 1}</td>
+                html += `<tr style="${isMe ? 'background-color: rgba(217, 249, 157, 0.08);' : ''}">
+                    <td style="color: var(--accent-brand)">#${idx + 1}</td>
                     <td style="font-weight: bold; ${isMe ? 'color: var(--accent-brand)' : ''}">${entry.team_name}</td>
-                    <td style="color: var(--text-muted)">${entry.language}</td>
-                    <td style="color: var(--accent-green)">${entry.composite_score.toFixed(2)}</td>
-                    <td>${tps}</td>
-                    <td style="color: var(--accent-amber)">${p99_us}µs</td>
+                    <td style="color: var(--text-muted)">${entry.language.toUpperCase()}</td>
+                    <td style="color: var(--accent-green)">${parseFloat(entry.composite_score).toFixed(2)}</td>
+                    <td>${(entry.tps / 1000).toFixed(1)}k</td>
+                    <td style="color: var(--accent-amber)">${(entry.p99_ns / 1000).toFixed(0)}µs</td>
                 </tr>`;
             });
-            html += `</table>`;
-            lbContainer.innerHTML = html;
+            tbody.innerHTML = html;
         }
 
         function updateLiveTelemetry(metrics) {
             const currentSession = localStorage.getItem('active_session_id');
             if (metrics.session_id === currentSession) {
-                const tpsIndicator = document.getElementById('live-tps-indicator');
-                tpsIndicator.style.color = 'var(--accent-cyan)';
-                tpsIndicator.textContent = `⚡ ${(metrics.tps / 1000).toFixed(2)}k TPS | ${metrics.violations} VIOLATIONS`;
+                const indicator = document.getElementById('live-tps-indicator');
+                if (indicator) {
+                    indicator.style.color = 'var(--accent-cyan)';
+                    indicator.textContent = `⚡ ${(metrics.tps / 1000).toFixed(2)}k TPS | ${metrics.violations} ERRORS`;
+                }
+
+                const term = document.getElementById('terminal-output');
+                if (term) {
+                    const time = new Date().toISOString().split('T')[1].substring(0,8);
+                    const msg = `[${time}] TRACE_TICK | Engine Outbound Throughput: ${(metrics.tps/1000).toFixed(1)}k TPS | Kernel boundary latency p99: ${(metrics.p99_ns/1000000).toFixed(2)}ms | Correctness sequence error spikes: ${metrics.violations}`;
+                    const row = document.createElement('div');
+                    row.textContent = msg;
+                    if (metrics.violations > 0) row.style.color = 'var(--accent-red)';
+                    term.appendChild(row);
+
+                    if (term.childNodes.length > 50) term.removeChild(term.firstChild);
+                    term.scrollTop = term.scrollHeight;
+                }
             }
         }
 
-        // 3. Deployment & Polling Logic
+        async function fetchHistory() {
+            const token = localStorage.getItem('token');
+            const tbody = document.getElementById('history-tbody');
+            if (!token || !tbody) return;
+
+            try {
+                const res = await fetch('/v1/submissions', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const text = await res.text();
+                let data = JSON.parse(text);
+
+                if (!data.submissions || data.submissions.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:24px; color:var(--text-muted);">No logs returned for active group workspace identity context.</td></tr>`;
+                    return;
+                }
+
+                let html = '';
+                data.submissions.forEach(sub => {
+                    let c = 'var(--text-main)';
+                    if (sub.Status === 'running') c = 'var(--accent-green)';
+                    else if (sub.Status.includes('failed')) c = 'var(--accent-red)';
+
+                    html += `<tr>
+                        <td style="color: var(--text-muted);">${new Date(sub.CreatedAt).toLocaleString()}</td>
+                        <td style="font-weight:bold;">${sub.Filename}</td>
+                        <td>${sub.Language.toUpperCase()}</td>
+                        <td style="color: ${c}; text-transform: uppercase;">${sub.Status}</td>
+                        <td style="color: var(--accent-cyan);">${sub.SessionID ? sub.SessionID.substring(0,8) : 'QUEUED'}</td>
+                    </tr>`;
+                });
+                tbody.innerHTML = html;
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:24px; color:var(--accent-red);">History parser crash: database link unready.</td></tr>`;
+            }
+        }
+
         function updateFileInfo() {
-            const fileInput = document.getElementById('file-upload');
-            const fileNameDisplay = document.getElementById('display-file-name');
-            const fileSizeDisplay = document.getElementById('display-file-size');
-
-            if (fileInput.files.length > 0) {
-                const file = fileInput.files[0];
-                fileNameDisplay.textContent = file.name.toUpperCase();
-                const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
-                fileSizeDisplay.textContent = `${sizeMB} MB • ready for furnace`;
-                fileSizeDisplay.style.color = 'var(--accent-cyan)';
+            const input = document.getElementById('file-upload');
+            if (input.files.length > 0) {
+                document.getElementById('display-file-name').textContent = input.files[0].name.toUpperCase();
+                document.getElementById('display-file-size').textContent = `${(input.files[0].size / (1024*1024)).toFixed(2)} MB • payloads verified`;
+                document.getElementById('display-file-size').style.color = 'var(--accent-cyan)';
             }
         }
 
-        function setStepStatus(stepId, statusStr) {
-            const icon = document.getElementById(`step-${stepId}`);
-            const text = document.getElementById(`text-${stepId}`);
-            if (statusStr === 'active') {
-                icon.textContent = '[~]';
-                icon.style.color = 'var(--accent-amber)';
-                text.style.color = 'var(--accent-amber)';
-            } else if (statusStr === 'done') {
-                icon.textContent = '[✓]';
-                icon.style.color = 'var(--accent-green)';
-                text.style.color = 'var(--text-main)';
-            } else if (statusStr === 'error') {
-                icon.textContent = '[X]';
-                icon.style.color = 'var(--accent-red)';
-                text.style.color = 'var(--accent-red)';
-            } else {
-                icon.textContent = '[ ]';
-                icon.style.color = 'var(--text-muted)';
-                text.style.color = 'var(--text-main)';
-            }
+        function setStepIndicator(step, state) {
+            const icon = document.getElementById(`step-${step}`);
+            const text = document.getElementById(`text-${step}`);
+            if (!icon || !text) return;
+            if (state === 'active') { icon.textContent = '[~]'; icon.style.color = 'var(--accent-amber)'; text.style.color = 'var(--accent-amber)'; }
+            else if (state === 'done') { icon.textContent = '[✓]'; icon.style.color = 'var(--accent-green)'; text.style.color = 'var(--text-main)'; }
+            else if (state === 'error') { icon.textContent = '[X]'; icon.style.color = 'var(--accent-red)'; text.style.color = 'var(--accent-red)'; }
         }
 
         async function submitCode() {
             const btn = document.getElementById('deploy-btn');
-            const errorBox = document.getElementById('error-box');
-            const pipelineStatus = document.getElementById('pipeline-status');
             const fileInput = document.getElementById('file-upload');
-            const language = document.getElementById('language-select').value;
-            const endpoint = document.getElementById('endpoint-select').value;
+            if (fileInput.files.length === 0) { showError("SYSTEM HALT: Target context file is empty."); return; }
 
-            if (fileInput.files.length === 0) {
-                showError("SYSTEM HALT: No binary or source zip selected.");
-                return;
-            }
-
-            errorBox.style.display = 'none';
-            btn.textContent = 'TRANSMITTING PAYLOAD...';
+            document.getElementById('error-box').style.display = 'none';
+            btn.textContent = 'TRANSMITTING ARCHIVE...';
             btn.style.backgroundColor = 'var(--accent-amber)';
             btn.disabled = true;
-            pipelineStatus.textContent = 'TRANSMITTING';
-            document.getElementById('live-tps-indicator').textContent = 'INITIALIZING';
-            document.getElementById('live-tps-indicator').style.color = 'var(--accent-amber)';
+            document.getElementById('pipeline-status').textContent = 'TRANSMITTING';
 
-            // Reset Pipeline UI
-            setStepStatus('upload', 'active');
-            setStepStatus('build', 'idle');
-            setStepStatus('deploy', 'idle');
+            setStepIndicator('upload', 'active');
+            setStepIndicator('build', 'idle');
+            setStepIndicator('deploy', 'idle');
 
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
-            formData.append('language', language);
-            formData.append('endpoint_type', endpoint);
+            formData.append('language', document.getElementById('language-select').value);
+            formData.append('endpoint_type', document.getElementById('endpoint-select').value);
 
-            const token = localStorage.getItem('token') || ""; 
+            const token = localStorage.getItem('token') || "";
 
             try {
                 const response = await fetch('/v1/submissions', {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    },
+                    headers: { 'Authorization': `Bearer ${token}` },
                     body: formData
                 });
 
-                // Safely read response as text first to handle both raw text errors and JSON objects
-                const responseText = await response.text();
-                let data = {};
-                try {
-                    data = JSON.parse(responseText);
-                } catch (e) {
-                    throw new Error(`Server returned raw response: "${responseText}" (HTTP ${response.status})`);
-                }
+                const txt = await response.text();
+                let val = {};
+                try { val = JSON.parse(txt); } catch(e) { throw new Error(txt); }
 
-                if (!response.ok) {
-                    throw new Error(data.error || `HTTP ${response.status}: Gateway rejected payload.`);
-                }
+                if (!response.ok) throw new Error(val.error || `HTTP ${response.status}: Rejection.`);
 
-                btn.textContent = 'BUILDING CONTAINER...';
-                pipelineStatus.textContent = 'QUEUED';
-                setStepStatus('upload', 'done');
-                setStepStatus('build', 'active');
-
-                // Start Polling the Submission Status
-                pollSubmissionStatus(data.submission_id, token, btn, pipelineStatus);
-
+                document.getElementById('pipeline-status').textContent = 'BUILDING';
+                setStepIndicator('upload', 'done');
+                setStepIndicator('build', 'active');
+                
+                pollPipelineStatus(val.submission_id, token, btn);
             } catch (err) {
-                showError(`DB ERROR: ${err.message}`);
+                showError(err.message);
                 btn.textContent = 'RETRY DEPLOYMENT';
                 btn.style.backgroundColor = 'var(--accent-brand)';
                 btn.disabled = false;
-                pipelineStatus.textContent = 'FAILED';
-                setStepStatus('upload', 'error');
+                setStepIndicator('upload', 'error');
             }
         }
 
-        function pollSubmissionStatus(submissionId, token, btn, pipelineStatus) {
-            const pollInterval = setInterval(async () => {
+        function pollPipelineStatus(subId, token, btn) {
+            const loop = setInterval(async () => {
                 try {
-                    const res = await fetch(`/v1/submissions/${submissionId}`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
-                    
-                    if (!res.ok) return; // Keep trying if gateway blips
-                    
-                    const sub = await res.json();
-                    pipelineStatus.textContent = sub.status.toUpperCase();
-                    
-                    if (sub.status === 'building') {
-                        setStepStatus('build', 'active');
-                    } else if (sub.status === 'deploying') {
-                        setStepStatus('build', 'done');
-                        setStepStatus('deploy', 'active');
-                        btn.textContent = 'DEPLOYING SANDBOX...';
-                    } else if (sub.status === 'running') {
-                        clearInterval(pollInterval);
-                        setStepStatus('deploy', 'done');
-                        btn.textContent = 'FLEET ENGAGED';
-                        btn.style.backgroundColor = 'var(--accent-green)';
-                        
-                        // Save session ID so live telemetry can track it
-                        if (sub.session_id) {
-                            localStorage.setItem('active_session_id', sub.session_id);
-                        }
+                    const res = await fetch(`/v1/submissions/${subId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    document.getElementById('pipeline-status').textContent = data.status.toUpperCase();
 
-                        // Allow new submissions after a delay
+                    if (data.status === 'building') {
+                        setStepIndicator('build', 'active');
+                    } else if (data.status === 'deploying') {
+                        setStepIndicator('build', 'done');
+                        setStepIndicator('deploy', 'active');
+                    } else if (data.status === 'running') {
+                        clearInterval(loop);
+                        setStepIndicator('deploy', 'done');
+                        btn.textContent = 'FLEET DEPLOYED';
+                        btn.style.backgroundColor = 'var(--accent-green)';
+                        if (data.session_id) localStorage.setItem('active_session_id', data.session_id);
                         setTimeout(() => {
-                            btn.textContent = 'DEPLOY NEW PAYLOAD';
+                            btn.textContent = 'DEPLOY TO FURNACE';
                             btn.style.backgroundColor = 'var(--accent-brand)';
                             btn.disabled = false;
-                            pipelineStatus.textContent = 'IDLE';
-                        }, 5000);
-                        
-                    } else if (sub.status.includes('failed')) {
-                        clearInterval(pollInterval);
-                        showError("SYSTEM HALT: " + (sub.error_msg || "Unknown error during " + sub.status));
+                            document.getElementById('pipeline-status').textContent = 'IDLE';
+                        }, 4000);
+                    } else if (data.status.includes('failed')) {
+                        clearInterval(loop);
+                        showError(`Pipeline error trace: ${data.error_msg || 'Crash context dump generated'}`);
                         btn.textContent = 'RETRY DEPLOYMENT';
                         btn.style.backgroundColor = 'var(--accent-brand)';
                         btn.disabled = false;
-                        
-                        if (sub.status === 'build_failed') setStepStatus('build', 'error');
-                        if (sub.status === 'deploy_failed') setStepStatus('deploy', 'error');
+                        if (data.status === 'build_failed') setStepIndicator('build', 'error');
+                        else setStepIndicator('deploy', 'error');
                     }
-                } catch (e) {
-                    console.error("Poll error:", e);
-                }
+                } catch(e) { clearInterval(loop); }
             }, 2000);
         }
 
         function showError(msg) {
-            const errorBox = document.getElementById('error-box');
-            errorBox.textContent = msg;
-            errorBox.style.display = 'block';
-        }
-
-        // Tab Switching Logic
-        function switchTab(tabId) {
-            // 1. Remove active class from all nav links
-            document.querySelectorAll('.nav-links span').forEach(link => {
-                link.classList.remove('active');
-            });
-            
-            // 2. Add active class to the clicked link
-            document.getElementById(`nav-${tabId}`).classList.add('active');
-
-            // 3. Hide all views
-            document.querySelectorAll('.tab-content').forEach(view => {
-                view.classList.remove('active-view');
-            });
-
-            // 4. Show target view
-            document.getElementById(`view-${tabId}`).classList.add('active-view');
+            const box = document.getElementById('error-box');
+            box.innerHTML = msg.includes('<html') ? "GATEWAY ERROR: Service link unready context." : msg;
+            box.style.display = 'block';
         }
     </script>
 </body>

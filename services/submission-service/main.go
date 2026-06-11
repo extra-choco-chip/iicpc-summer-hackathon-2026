@@ -88,20 +88,28 @@ func (db *DB) CreateSubmission(ctx context.Context, s *SubmissionRecord) error {
 	if db.pool == nil {
 		return nil
 	}
-	
-	// 1. Upsert the team to ensure Postgres knows about them before attaching a submission
-	_, _ = db.pool.Exec(ctx, `
-		INSERT INTO teams (team_id, team_name) 
-		VALUES ($1, $2) 
-		ON CONFLICT (team_id) DO NOTHING`, 
-		s.TeamID, s.TeamName)
+
+	// Guard against empty UUID strings which crash Postgres
+	var teamID interface{} = s.TeamID
+	if s.TeamID == "" {
+		teamID = nil
+	}
+
+	// 1. Upsert the team to resolve Redis vs Postgres split-brain
+	if teamID != nil {
+		_, _ = db.pool.Exec(ctx, `
+			INSERT INTO teams (team_id, team_name) 
+			VALUES ($1, $2) 
+			ON CONFLICT (team_id) DO NOTHING`, 
+			teamID, s.TeamName)
+	}
 
 	// 2. Insert the actual submission
 	_, err := db.pool.Exec(ctx, `
 		INSERT INTO submissions
 		  (submission_id, team_id, team_name, language, endpoint_type, filename, object_key, status)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-		s.SubmissionID, s.TeamID, s.TeamName, s.Language,
+		s.SubmissionID, teamID, s.TeamName, s.Language,
 		s.EndpointType, s.Filename, s.ObjectKey, s.Status)
 	return err
 }
@@ -372,11 +380,11 @@ func (jd *JobDeployer) Deploy(ctx context.Context, submissionID, imageRef, endpo
 	sessionID := uuid.New().String()
 	port := "8080"
 
-	// Try to run via docker
 	containerName := fmt.Sprintf("contestant-%s", submissionID[:8])
+	
+	// FIX: Removed the crashing network flag. We now map to a random host port.
 	cmd := exec.CommandContext(ctx, "docker", "run", "-d",
 		"--name", containerName,
-		"--network", "orderfurnace_orderfurnace",
 		"--cpus", "2",
 		"--memory", "4g",
 		"--memory-swap", "4g",
@@ -384,38 +392,36 @@ func (jd *JobDeployer) Deploy(ctx context.Context, submissionID, imageRef, endpo
 		"--tmpfs", "/tmp:size=512m",
 		"--cap-drop", "ALL",
 		"--security-opt", "no-new-privileges",
-		"-p", fmt.Sprintf("0:%s", port),
+		"-p", "0:8080",
 		imageRef,
 	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Printf("WARNING: docker run failed (using mock): %v: %s", err, out)
-		// In dev without Docker, return a mock target
+		log.Printf("WARNING: docker run failed: %v: %s", err, string(out))
 		return sessionID, nil
 	}
 
 	containerID := strings.TrimSpace(string(out))
 
-	// Get assigned host port
-	portCmd := exec.Command("docker", "port", containerID, port)
+	// Dynamically fetch the random port Docker assigned
+	portCmd := exec.Command("docker", "port", containerID, "8080")
 	portOut, err := portCmd.Output()
 	if err == nil {
-		// portOut looks like "0.0.0.0:32768"
 		parts := strings.Split(strings.TrimSpace(string(portOut)), ":")
-		if len(parts) == 2 {
-			port = parts[1]
+		if len(parts) >= 2 {
+			port = strings.TrimSpace(parts[len(parts)-1])
 		}
 	}
 
-	targetURL := fmt.Sprintf("ws://localhost:%s", port)
+	// FIX: Use Docker Desktop's bulletproof host routing
+	targetURL := fmt.Sprintf("ws://host.docker.internal:%s", port)
 	if endpointType == "REST" || endpointType == "HTTP2" {
-		targetURL = fmt.Sprintf("http://localhost:%s", port)
+		targetURL = fmt.Sprintf("http://host.docker.internal:%s", port)
 	}
 
 	log.Printf("Deployed contestant %s → container %s, endpoint %s",
 		submissionID[:8], containerID[:12], targetURL)
 
-	// Notify orchestrator to start bot fleet
 	go jd.notifyOrchestrator(context.Background(), sessionID, submissionID, targetURL, endpointType)
 
 	return sessionID, nil
@@ -487,7 +493,6 @@ func (h *Handler) SubmitCode(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	defer os.Remove(tmpFile.Name())
 	if _, err := io.Copy(tmpFile, file); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -525,9 +530,12 @@ func (h *Handler) SubmitCode(c *gin.Context) {
 		return
 	}
 
-	// Kick off async build + deploy
-	go h.buildAndDeploy(context.Background(), submissionID, language, endpointType, tmpFile.Name())
-
+	// Kick off async build + deploy inside a safe wrapper that handles cleanup
+    go func(targetFile string) {
+        defer os.Remove(targetFile) // Safely waits for the build to finish, then deletes
+        h.buildAndDeploy(context.Background(), submissionID, language, endpointType, targetFile)
+    }(tmpFile.Name())
+	
 	c.JSON(http.StatusAccepted, gin.H{
 		"submission_id": submissionID,
 		"status":        "pending",
@@ -536,6 +544,7 @@ func (h *Handler) SubmitCode(c *gin.Context) {
 }
 
 func (h *Handler) buildAndDeploy(ctx context.Context, submissionID, language, endpointType, archivePath string) {
+	
 	// Update status: building
 	h.db.UpdateSubmission(ctx, submissionID, "building", "", "", "")
 
@@ -557,6 +566,16 @@ func (h *Handler) buildAndDeploy(ctx context.Context, submissionID, language, en
 
 	h.db.UpdateSubmission(ctx, submissionID, "running", imageRef, "", sessionID)
 	log.Printf("Submission %s running as session %s", submissionID, sessionID)
+
+	// Force the database to register the active session so the UI can lock on!
+	if h.db != nil && h.db.pool != nil {
+		_, err = h.db.pool.Exec(ctx, 
+			"UPDATE submissions SET status = 'running', session_id = $1 WHERE submission_id = $2", 
+			sessionID, submissionID)
+		if err != nil {
+			log.Printf("Failed to update database status to running: %v", err)
+		}
+	}
 }
 
 func (h *Handler) GetSubmission(c *gin.Context) {
