@@ -16,7 +16,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -mod=mod -ldflags="-w -s" -o service .
 
 FROM alpine:3.19
-RUN apk add --no-cache docker-cli
+COPY --from=docker:cli /usr/local/bin/docker /usr/local/bin/docker
 RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 COPY --from=builder /app/service ./service
