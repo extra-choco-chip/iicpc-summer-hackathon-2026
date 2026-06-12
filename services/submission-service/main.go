@@ -303,14 +303,6 @@ func (b *Builder) Build(ctx context.Context, submissionID, language, archivePath
 		return imageRef + "-mock", nil
 	}
 
-	// Push to registry
-	pushCmd := exec.CommandContext(ctx, "docker", "push", imageRef)
-	pushCmd.Stdout = os.Stdout
-	pushCmd.Stderr = os.Stderr
-	if err := pushCmd.Run(); err != nil {
-		log.Printf("WARNING: docker push not available: %v", err)
-	}
-
 	return imageRef, nil
 }
 
@@ -414,9 +406,9 @@ func (jd *JobDeployer) Deploy(ctx context.Context, submissionID, imageRef, endpo
 	}
 
 	// FIX: Use Docker Desktop's bulletproof host routing
-	targetURL := fmt.Sprintf("ws://host.docker.internal:%s", port)
+	targetURL := fmt.Sprintf("ws://172.17.0.1:%s", port)
 	if endpointType == "REST" || endpointType == "HTTP2" {
-		targetURL = fmt.Sprintf("http://host.docker.internal:%s", port)
+		targetURL = fmt.Sprintf("http://172.17.0.1:%s", port)
 	}
 
 	log.Printf("Deployed contestant %s → container %s, endpoint %s",
