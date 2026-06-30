@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"math/rand"
 	"os"
 	"sort"
 	"sync"
@@ -230,12 +231,20 @@ type SessionMetrics struct {
 func (m *SessionMetrics) Record(latencyNS int64, violation bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if latencyNS > 0 {
-		m.latencies = append(m.latencies, latencyNS)
-	}
 	m.totalOrders++
 	if violation {
 		m.violations++
+	}
+	if latencyNS > 0 {
+		// Reservoir sampling, cap at 10,000 entries
+		if len(m.latencies) < 10000 {
+			m.latencies = append(m.latencies, latencyNS)
+		} else {
+			idx := rand.Int63n(m.totalOrders)
+			if idx < 10000 {
+				m.latencies[idx] = latencyNS
+			}
+		}
 	}
 }
 

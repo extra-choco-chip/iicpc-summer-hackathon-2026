@@ -75,6 +75,9 @@ type Orchestrator struct {
 
 	// Channels: workerID → command channel
 	cmdChans map[string]chan WorkerCmd
+
+	// Track per-worker last-reported orders for delta computation
+	lastReportedOrders map[string]int64
 }
 
 type WorkerCmd struct {
@@ -87,10 +90,11 @@ type WorkerCmd struct {
 
 func NewOrchestrator(rdb *redis.Client) *Orchestrator {
 	o := &Orchestrator{
-		sessions: make(map[string]*BenchmarkSession),
-		workers:  make(map[string]*WorkerInfo),
-		cmdChans: make(map[string]chan WorkerCmd),
-		rdb:      rdb,
+		sessions:           make(map[string]*BenchmarkSession),
+		workers:            make(map[string]*WorkerInfo),
+		cmdChans:           make(map[string]chan WorkerCmd),
+		lastReportedOrders: make(map[string]int64),
+		rdb:                rdb,
 	}
 	go o.reconcileLoop()
 	go o.metricsAggLoop()
@@ -98,7 +102,7 @@ func NewOrchestrator(rdb *redis.Client) *Orchestrator {
 }
 
 // StartSession creates a new benchmark session and dispatches to workers.
-func (o *Orchestrator) StartSession(ctx context.Context, submissionID, sessionID, targetURL, endpointType string, botCount, durationSecs int) (*BenchmarkSession, error) {
+func (o *Orchestrator) StartSession(ctx context.Context, submissionID, sessionID, targetURL, endpointType, teamName, language string, botCount, durationSecs int) (*BenchmarkSession, error) {
 	if sessionID == "" {
 		sessionID = uuid.New().String()
 	}
@@ -120,8 +124,23 @@ func (o *Orchestrator) StartSession(ctx context.Context, submissionID, sessionID
 	o.mu.Unlock()
 
 	// Persist session to Redis
-	data, _ := json.Marshal(sess)
-	o.rdb.Set(ctx, fmt.Sprintf("session:%s", sessionID), data, time.Duration(durationSecs+300)*time.Second)
+	data, err := json.Marshal(sess)
+	if err != nil {
+		return nil, err
+	}
+	if err := o.rdb.Set(ctx, "session:"+sessionID, data, 0).Err(); err != nil {
+		return nil, err
+	}
+
+	// Save session_meta for scoring-service
+	if err := o.rdb.HSet(ctx, "session_meta:"+sessionID, "team_name", teamName, "language", language, "submission_id", submissionID).Err(); err != nil {
+		return nil, err
+	}
+
+	// Publish start event for ws-gateway
+	msg := map[string]interface{}{"type": "session_started", "session_id": sessionID}
+	msgData, _ := json.Marshal(msg)
+	o.rdb.Publish(ctx, "events", msgData)
 
 	// Dispatch to all connected workers
 	go o.dispatchToWorkers(sessionID, targetURL, endpointType, botCount, durationSecs)
@@ -255,10 +274,16 @@ func (o *Orchestrator) UpdateWorkerHeartbeat(hb WorkerHeartbeat) {
 		w.LastSeen = time.Now()
 	}
 
-	// Aggregate into session
+	// Compute delta from last reported value to avoid inflating totals
 	if hb.SessionID != "" {
 		if sess, ok := o.sessions[hb.SessionID]; ok {
-			sess.OrdersSent += hb.OrdersSent
+			lastKey := hb.WorkerID + ":" + hb.SessionID
+			lastReported := o.lastReportedOrders[lastKey]
+			delta := hb.OrdersSent - lastReported
+			if delta > 0 {
+				sess.OrdersSent += delta
+			}
+			o.lastReportedOrders[lastKey] = hb.OrdersSent
 		}
 	}
 }
@@ -342,6 +367,8 @@ func (h *APIHandler) StartSession(c *gin.Context) {
 	var req struct {
 		SubmissionID string `json:"submission_id"`
 		SessionID    string `json:"session_id"`
+		TeamName     string `json:"team_name"`
+		Language     string `json:"language"`
 		TargetURL    string `json:"target_url"`
 		EndpointType string `json:"endpoint_type"`
 		BotCount     int    `json:"bot_count"`
@@ -363,7 +390,7 @@ func (h *APIHandler) StartSession(c *gin.Context) {
 
 	sess, err := h.orch.StartSession(c.Request.Context(),
 		req.SubmissionID, req.SessionID, req.TargetURL,
-		req.EndpointType, req.BotCount, req.DurationSecs)
+		req.EndpointType, req.TeamName, req.Language, req.BotCount, req.DurationSecs)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

@@ -1,5 +1,3 @@
-version: "3.9"
-
 networks:
   orderfurnace:
     driver: bridge
@@ -130,12 +128,15 @@ services:
       SUBMISSION_SVC: "http://submission-service:8080"
       WS_GATEWAY:     "http://ws-gateway:8080"
       SCORING_URL:    "http://scoring-service:8080"
+      BOT_ORCHESTRATOR_URL: "http://bot-orchestrator:9090"
       REDIS_URL:      "redis:6379"
     networks: [orderfurnace]
     ports: ["8000:8080"]
     depends_on:
       redis:
         condition: service_healthy
+      bot-orchestrator:
+        condition: service_started
     restart: unless-stopped
 
   submission-service:

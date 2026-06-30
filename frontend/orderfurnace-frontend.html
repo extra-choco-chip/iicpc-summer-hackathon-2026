@@ -436,7 +436,9 @@
 
     <script>
         let ws;
-        const GATEWAY_URL = window.location.protocol === 'https:' ? `wss://${window.location.host}/v1/stream` : `ws://${window.location.host || 'localhost:3000'}/v1/stream`;
+        const GATEWAY_URL = window.location.protocol === 'https:' 
+    ? `wss://${window.location.host}/v1/stream` 
+    : `ws://${window.location.host === '' ? 'localhost:3000' : window.location.host}/v1/stream`;
 
         document.addEventListener("DOMContentLoaded", async () => {
             if (!localStorage.getItem('token')) {
@@ -590,15 +592,15 @@
                 let html = '';
                 data.submissions.forEach(sub => {
                     let c = 'var(--text-main)';
-                    if (sub.Status === 'running') c = 'var(--accent-green)';
-                    else if (sub.Status.includes('failed')) c = 'var(--accent-red)';
+                    if (sub.status === 'running') c = 'var(--accent-green)';
+                    else if (sub.status.includes('failed')) c = 'var(--accent-red)';
 
                     html += `<tr>
-                        <td style="color: var(--text-muted);">${new Date(sub.CreatedAt).toLocaleString()}</td>
-                        <td style="font-weight:bold;">${sub.Filename}</td>
-                        <td>${sub.Language.toUpperCase()}</td>
-                        <td style="color: ${c}; text-transform: uppercase;">${sub.Status}</td>
-                        <td style="color: var(--accent-cyan);">${sub.SessionID ? sub.SessionID.substring(0,8) : 'QUEUED'}</td>
+                        <td style="color: var(--text-muted);">${new Date(sub.created_at).toLocaleString()}</td>
+                        <td style="font-weight:bold;">${sub.filename}</td>
+                        <td>${sub.language.toUpperCase()}</td>
+                        <td style="color: ${c}; text-transform: uppercase;">${sub.status}</td>
+                        <td style="color: var(--accent-cyan);">${sub.session_id ? sub.session_id.substring(0,8) : 'QUEUED'}</td>
                     </tr>`;
                 });
                 tbody.innerHTML = html;

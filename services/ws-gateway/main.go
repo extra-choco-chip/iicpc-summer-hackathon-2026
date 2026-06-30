@@ -121,52 +121,65 @@ func streamHandler(hub *Hub) http.HandlerFunc {
 		}
 		hub.Register(client)
 
+		// done channel coordinates shutdown of all goroutines
+		done := make(chan struct{})
+
 		// Write pump — sends queued messages to the browser
 		go func() {
-			defer func() {
-				hub.Unregister(client.id)
-				conn.Close()
-			}()
-			for msg := range client.send {
-				conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-				if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+			defer conn.Close()
+			for {
+				select {
+				case msg, ok := <-client.send:
+					if !ok {
+						// Channel was closed by Unregister
+						return
+					}
+					conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+					if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+						return
+					}
+				case <-done:
 					return
 				}
 			}
 		}()
 
-		// Read pump — keeps connection alive, handles client pings
-		defer func() {
-			hub.Unregister(client.id)
-			conn.Close()
+		// Ping ticker goroutine — keeps the connection alive
+		go func() {
+			pingTicker := time.NewTicker(30 * time.Second)
+			defer pingTicker.Stop()
+			for {
+				select {
+				case <-pingTicker.C:
+					conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+					if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+						return
+					}
+				case <-done:
+					return
+				}
+			}
 		}()
+
+		// Read pump — blocks until client disconnects, then cleans up everything
 		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		conn.SetPongHandler(func(string) error {
 			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 			return nil
 		})
 
-		// Ping ticker
-		pingTicker := time.NewTicker(30 * time.Second)
-		defer pingTicker.Stop()
-
-		go func() {
-			for range pingTicker.C {
-				conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-					return
-				}
-			}
-		}()
-
-		// Block until client disconnects
 		for {
 			_, _, err := conn.ReadMessage()
 			if err != nil {
-				return
+				break
 			}
 			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		}
+
+		// Client disconnected — clean up once
+		close(done)
+		hub.Unregister(client.id)
+		conn.Close()
 	}
 }
 

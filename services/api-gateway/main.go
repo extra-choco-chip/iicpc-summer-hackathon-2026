@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
@@ -19,22 +21,24 @@ import (
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 type Config struct {
-	Port           string
-	JWTSecret      string
-	SubmissionSvc  string
-	WsGateway      string
-	ScoringURL     string
-	RedisURL       string
+	Port              string
+	JWTSecret         string
+	SubmissionSvc     string
+	WsGateway         string
+	ScoringURL        string
+	OrchestratorURL   string
+	RedisURL          string
 }
 
 func configFromEnv() Config {
 	return Config{
-		Port:          getenv("PORT", "8080"),
-		JWTSecret:     getenv("JWT_SECRET", "dev-secret-change-in-prod"),
-		SubmissionSvc: getenv("SUBMISSION_SVC", "http://submission-service:8080"),
-		WsGateway:     getenv("WS_GATEWAY", "http://ws-gateway:8080"),
-		ScoringURL:    getenv("SCORING_URL", "http://scoring-service:8080"),
-		RedisURL:      getenv("REDIS_URL", "redis:6379"),
+		Port:            getenv("PORT", "8080"),
+		JWTSecret:       getenv("JWT_SECRET", "dev-secret-change-in-prod"),
+		SubmissionSvc:   getenv("SUBMISSION_SVC", "http://submission-service:8080"),
+		WsGateway:       getenv("WS_GATEWAY", "http://ws-gateway:8080"),
+		ScoringURL:      getenv("SCORING_URL", "http://scoring-service:8080"),
+		OrchestratorURL: getenv("BOT_ORCHESTRATOR_URL", "http://bot-orchestrator:9090"),
+		RedisURL:        getenv("REDIS_URL", "redis:6379"),
 	}
 }
 
@@ -43,6 +47,16 @@ func getenv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// ─── Password hashing (SHA-256 + salt) ────────────────────────────────────────
+
+func hashPassword(password string) string {
+	// In production use bcrypt/argon2; SHA-256 with a fixed salt for hackathon.
+	h := sha256.New()
+	h.Write([]byte("orderfurnace-salt:"))
+	h.Write([]byte(password))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // ─── Rate limiter (token bucket via Redis) ────────────────────────────────────
@@ -165,6 +179,50 @@ func proxyTo(targetBase string) gin.HandlerFunc {
 	}
 }
 
+// proxyRewrite rewrites the URL path prefix before proxying. This is needed
+// when the gateway exposes routes under /v1/... but the downstream service
+// expects them under /api/... (e.g. bot-orchestrator).
+func proxyRewrite(targetBase, oldPrefix, newPrefix string) gin.HandlerFunc {
+	client := &http.Client{Timeout: 30 * time.Second}
+	return func(c *gin.Context) {
+		uri := c.Request.URL.RequestURI()
+		uri = strings.Replace(uri, oldPrefix, newPrefix, 1)
+		url := targetBase + uri
+		req, err := http.NewRequestWithContext(c.Request.Context(),
+			c.Request.Method, url, c.Request.Body)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+			return
+		}
+		for k, vv := range c.Request.Header {
+			for _, v := range vv {
+				req.Header.Add(k, v)
+			}
+		}
+		if tid, ok := c.Get("team_id"); ok {
+			req.Header.Set("X-Team-ID", fmt.Sprintf("%v", tid))
+		}
+		if tn, ok := c.Get("team_name"); ok {
+			req.Header.Set("X-Team-Name", fmt.Sprintf("%v", tn))
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+			return
+		}
+		defer resp.Body.Close()
+
+		for k, vv := range resp.Header {
+			for _, v := range vv {
+				c.Header(k, v)
+			}
+		}
+		c.Status(resp.StatusCode)
+		io.Copy(c.Writer, resp.Body)
+	}
+}
+
 // ─── Auth handlers ────────────────────────────────────────────────────────────
 
 type AuthHandler struct {
@@ -192,7 +250,9 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": "team name already taken"})
 		return
 	}
-	h.rdb.HSet(ctx, key, "team_id", teamID, "password", body.Password)
+	// Hash password before storing
+	hashedPw := hashPassword(body.Password)
+	h.rdb.HSet(ctx, key, "team_id", teamID, "password", hashedPw)
 	h.rdb.Set(ctx, fmt.Sprintf("team_id:%s", teamID), body.TeamName, 0)
 
 	token, err := h.issueToken(teamID, body.TeamName)
@@ -220,7 +280,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	ctx := c.Request.Context()
 	key := fmt.Sprintf("team:%s", body.TeamName)
 	stored, err := h.rdb.HGetAll(ctx, key).Result()
-	if err != nil || stored["password"] != body.Password {
+	// Fix: check for empty map (team doesn't exist) AND compare hashed password
+	if err != nil || len(stored) == 0 || stored["password"] != hashPassword(body.Password) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
 	}
@@ -302,16 +363,22 @@ func main() {
 	api.GET("/submissions", proxyTo(cfg.SubmissionSvc))
 	api.GET("/submissions/:id", proxyTo(cfg.SubmissionSvc))
 
-	// Benchmark sessions
-	api.POST("/sessions/:id/start", proxyTo(cfg.SubmissionSvc))
-	api.POST("/sessions/:id/stop", proxyTo(cfg.SubmissionSvc))
-	api.GET("/sessions/:id", proxyTo(cfg.SubmissionSvc))
+	// Benchmark sessions — route to bot-orchestrator with path rewrite
+	// Gateway exposes /v1/sessions/... but orchestrator serves /api/sessions/...
+	orchProxy := proxyRewrite(cfg.OrchestratorURL, "/v1/sessions", "/api/sessions")
+	api.POST("/sessions/start", orchProxy)
+	api.POST("/sessions/:id/stop", orchProxy)
+	api.GET("/sessions/:id", orchProxy)
+	api.GET("/sessions", orchProxy)
 
 	// Leaderboard + scores (public read)
 	r.GET("/v1/leaderboard", proxyTo(cfg.ScoringURL))
 	r.GET("/v1/scores/:session_id", proxyTo(cfg.ScoringURL))
 
-	// WebSocket passthrough (ws-gateway handles upgrade)
+	// WebSocket passthrough (nginx handles upgrade directly; this is a fallback)
+	// Note: proxyTo does NOT handle WebSocket upgrades. The nginx frontend
+	// config correctly routes /v1/stream directly to ws-gateway:8080 bypassing
+	// this gateway. These routes exist only for non-WS health/status checks.
 	r.GET("/v1/stream/:session_id", proxyTo(cfg.WsGateway))
 	r.GET("/v1/stream", proxyTo(cfg.WsGateway))
 

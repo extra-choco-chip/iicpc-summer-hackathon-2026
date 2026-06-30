@@ -82,10 +82,20 @@ func NewScoringEngine(rdb *redis.Client, pool *pgxpool.Pool) *ScoringEngine {
 }
 
 func (se *ScoringEngine) RunOnce(ctx context.Context) {
-	keys, err := se.rdb.Keys(ctx, "metrics:*").Result()
-	if err != nil {
-		log.Printf("scoring: redis error: %v", err)
-		return
+	var cursor uint64
+	var keys []string
+	for {
+		var batch []string
+		var err error
+		batch, cursor, err = se.rdb.Scan(ctx, cursor, "metrics:*", 100).Result()
+		if err != nil {
+			log.Printf("scoring: redis error: %v", err)
+			return
+		}
+		keys = append(keys, batch...)
+		if cursor == 0 {
+			break
+		}
 	}
 	for _, key := range keys {
 		se.scoreSession(ctx, key[len("metrics:"):])
@@ -112,7 +122,7 @@ func (se *ScoringEngine) scoreSession(ctx context.Context, sessionID string) {
 	se.mu.Lock()
 	if se.lastUpdate[sessionID] == updatedAt {
 		se.mu.Unlock()
-		return // Skip insertion, metrics haven't changed
+		return
 	}
 	se.lastUpdate[sessionID] = updatedAt
 	se.mu.Unlock()
@@ -121,12 +131,13 @@ func (se *ScoringEngine) scoreSession(ctx context.Context, sessionID string) {
 
 	teamName, _ := se.rdb.HGet(ctx, "session_meta:"+sessionID, "team_name").Result()
 	language, _ := se.rdb.HGet(ctx, "session_meta:"+sessionID, "language").Result()
+	submissionID, _ := se.rdb.HGet(ctx, "session_meta:"+sessionID, "submission_id").Result()
 	if teamName == "" {
 		teamName = "unknown"
 	}
 
 	e := &LeaderboardEntry{
-		SessionID: sessionID, TeamName: teamName, Language: language,
+		SessionID: sessionID, SubmissionID: submissionID, TeamName: teamName, Language: language,
 		CompositeScore: composite, ThroughputScore: tScore,
 		LatencyScore: lScore, CorrectnessScore: cScore, StabilityScore: sScore,
 		P50NS: p50, P90NS: p90, P99NS: p99,

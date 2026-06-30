@@ -69,19 +69,19 @@ func NewDB(ctx context.Context, dsn string) (*DB, error) {
 }
 
 type SubmissionRecord struct {
-	SubmissionID string
-	TeamID       string
-	TeamName     string
-	Language     string
-	EndpointType string
-	Filename     string
-	ObjectKey    string
-	ImageRef     string
-	Status       string
-	SessionID    string
-	ErrorMsg     string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	SubmissionID string    `json:"submission_id"`
+	TeamID       string    `json:"team_id"`
+	TeamName     string    `json:"team_name"`
+	Language     string    `json:"language"`
+	EndpointType string    `json:"endpoint_type"`
+	Filename     string    `json:"filename"`
+	ObjectKey    string    `json:"object_key"`
+	ImageRef     string    `json:"image_ref"`
+	Status       string    `json:"status"`
+	SessionID    string    `json:"session_id"`
+	ErrorMsg     string    `json:"error_msg"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 func (db *DB) CreateSubmission(ctx context.Context, s *SubmissionRecord) error {
@@ -368,7 +368,7 @@ type JobDeployer struct {
 
 // Deploy starts the contestant container and notifies bot-orchestrator.
 // In production this creates a K8s Job with gVisor runtime. Here we use docker.
-func (jd *JobDeployer) Deploy(ctx context.Context, submissionID, imageRef, endpointType string) (string, error) {
+func (jd *JobDeployer) Deploy(ctx context.Context, submissionID, teamName, language, imageRef, endpointType string) (string, error) {
 	sessionID := uuid.New().String()
 	port := "8080"
 
@@ -414,17 +414,17 @@ func (jd *JobDeployer) Deploy(ctx context.Context, submissionID, imageRef, endpo
 	log.Printf("Deployed contestant %s → container %s, endpoint %s",
 		submissionID[:8], containerID[:12], targetURL)
 
-	go jd.notifyOrchestrator(context.Background(), sessionID, submissionID, targetURL, endpointType)
+	go jd.notifyOrchestrator(context.Background(), sessionID, submissionID, teamName, language, targetURL, endpointType)
 
 	return sessionID, nil
 }
 
-func (jd *JobDeployer) notifyOrchestrator(ctx context.Context, sessionID, submissionID, targetURL, endpointType string) {
+func (jd *JobDeployer) notifyOrchestrator(ctx context.Context, sessionID, submissionID, teamName, language, targetURL, endpointType string) {
 	// Wait for container to be ready
 	time.Sleep(3 * time.Second)
 
-	body := fmt.Sprintf(`{"session_id":%q,"submission_id":%q,"target_url":%q,"endpoint_type":%q,"bot_count":2048,"duration_secs":300}`,
-		sessionID, submissionID, targetURL, endpointType)
+	body := fmt.Sprintf(`{"session_id":%q,"submission_id":%q,"team_name":%q,"language":%q,"target_url":%q,"endpoint_type":%q,"bot_count":2048,"duration_secs":300}`,
+		sessionID, submissionID, teamName, language, targetURL, endpointType)
 	req, err := http.NewRequestWithContext(ctx, "POST",
 		jd.orchURL+"/api/sessions/start", strings.NewReader(body))
 	if err != nil {
@@ -524,8 +524,13 @@ func (h *Handler) SubmitCode(c *gin.Context) {
 
 	// Kick off async build + deploy inside a safe wrapper that handles cleanup
     go func(targetFile string) {
-        defer os.Remove(targetFile) // Safely waits for the build to finish, then deletes
-        h.buildAndDeploy(context.Background(), submissionID, language, endpointType, targetFile)
+        defer os.Remove(targetFile)
+        defer func() {
+            if r := recover(); r != nil {
+                log.Printf("PANIC in buildAndDeploy for submission: %v", r)
+            }
+        }()
+        h.buildAndDeploy(context.Background(), submissionID, teamName, language, endpointType, targetFile)
     }(tmpFile.Name())
 	
 	c.JSON(http.StatusAccepted, gin.H{
@@ -535,7 +540,7 @@ func (h *Handler) SubmitCode(c *gin.Context) {
 	})
 }
 
-func (h *Handler) buildAndDeploy(ctx context.Context, submissionID, language, endpointType, archivePath string) {
+func (h *Handler) buildAndDeploy(ctx context.Context, submissionID, teamName, language, endpointType, archivePath string) {
 	
 	// Update status: building
 	h.db.UpdateSubmission(ctx, submissionID, "building", "", "", "")
@@ -549,7 +554,7 @@ func (h *Handler) buildAndDeploy(ctx context.Context, submissionID, language, en
 
 	h.db.UpdateSubmission(ctx, submissionID, "deploying", imageRef, "", "")
 
-	sessionID, err := h.deployer.Deploy(ctx, submissionID, imageRef, endpointType)
+	sessionID, err := h.deployer.Deploy(ctx, submissionID, teamName, language, imageRef, endpointType)
 	if err != nil {
 		log.Printf("Deploy failed for %s: %v", submissionID, err)
 		h.db.UpdateSubmission(ctx, submissionID, "deploy_failed", imageRef, err.Error(), "")
